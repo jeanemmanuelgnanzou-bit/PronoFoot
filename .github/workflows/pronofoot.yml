@@ -1,0 +1,61 @@
+name: Mise à jour PronoFoot
+
+on:
+  schedule:
+    - cron: "0 15 * * 2"   # mardi 15:00 (heure d'Abidjan = UTC)
+    - cron: "0 18 * * 5"   # vendredi 18:00
+    - cron: "0 11 * * 6"   # samedi 11:00
+  workflow_dispatch: {}     # bouton « Run workflow » pour lancer à la main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pronofoot
+  cancel-in-progress: false
+
+jobs:
+  mise-a-jour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Récupérer les données des lancements précédents
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: pronofoot-data-${{ github.run_id }}
+          restore-keys: pronofoot-data-
+
+      - name: Lancer PronoFoot
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          printf '%s' "$ODDS_API_KEY" > cle_api.txt
+          python main.py --pas-de-navigateur | tee lancement.txt
+          rm -f cle_api.txt
+          mkdir -p site
+          cp PronoFoot.html site/index.html
+          cp lancement.txt site/dernier_lancement.txt
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploiement
+        uses: actions/deploy-pages@v4
