@@ -113,6 +113,11 @@ td.n, th.n { text-align: right; }
 .matchhead .t.a { text-align: right; }
 .matchhead .xg { font-family: var(--f-mono); font-size: 13px; color: var(--fg-2); margin-top: 4px; }
 .score { font-family: var(--f-display); font-size: 40px; font-weight: 700; background: var(--fg); color: var(--bg); padding: 2px 14px; border-radius: 8px; letter-spacing: .04em; text-align: center; }
+.score { font-size: 15px; padding: 10px 14px; min-width: 150px; display: grid; gap: 2px; }
+.score .sc { display: flex; justify-content: space-between; gap: 14px; font-family: var(--f-display); font-size: 22px; line-height: 1.15; letter-spacing: .03em; }
+.score .sc b { font-weight: 700; } .score .sc span { font-family: var(--f-mono); font-size: 13px; font-weight: 500; opacity: .8; align-self: center; }
+.score .sc.first { font-size: 30px; } .score .sc.first span { font-size: 15px; opacity: 1; }
+.score .tot { border-top: 1px solid currentColor; opacity: .85; margin-top: 4px; padding-top: 5px; font-family: var(--f-body); font-size: 12px; letter-spacing: 0; font-weight: 500; }
 .score small { display: block; font-size: 11px; font-family: var(--f-body); letter-spacing: .06em; text-transform: uppercase; font-weight: 500; opacity: .75; }
 .heat { display: grid; grid-template-columns: 34px repeat(6, minmax(0, 1fr)); gap: 2px; font-family: var(--f-mono); font-size: 12px; }
 .heat div { padding: 6px 2px; text-align: center; border-radius: 4px; }
@@ -162,7 +167,7 @@ details.panel summary::marker { color: var(--accent); }
 @media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) {
   header.top { position: static; }
-  .matchhead .t { font-size: 24px; } .score { font-size: 30px; }
+  .matchhead .t { font-size: 24px; } .score { min-width: 0; padding: 8px 10px; } .score .sc.first { font-size: 24px; } .score .sc { font-size: 18px; }
   .bank { margin-left: 0; width: 100%; } .bank input { flex: 1; }
   .teams { font-size: 18px; }
 }
@@ -214,7 +219,7 @@ details.panel summary::marker { color: var(--accent); }
         <div class="panel stack">
           <div class="matchhead">
             <div><div class="t" id="hName"></div><div class="xg" id="hXg"></div></div>
-            <div class="score"><span id="likely"></span><small>score le + probable</small></div>
+            <div class="score" id="likely" aria-label="Scores les plus probables"></div>
             <div><div class="t a" id="aName"></div><div class="xg" id="aXg" style="text-align:right"></div></div>
           </div>
           <div>
@@ -595,7 +600,14 @@ function renderAnalyse() {
   P = predict(cur.l, cur.h, cur.a);
   $("#hName").textContent = cur.h; $("#aName").textContent = cur.a;
   $("#hXg").textContent = "xG " + dec(P.lh); $("#aXg").textContent = "xG " + dec(P.la);
-  $("#likely").textContent = P.best[0] + " – " + P.best[1];
+  const scores = [];
+  for (let i = 0; i < P.M.length; i++) for (let j = 0; j < P.M.length; j++) scores.push([i, j, P.M[i][j]]);
+  scores.sort((a, b) => b[2] - a[2]);
+  const tot = {}; scores.forEach(([i, j, p]) => tot[i + j] = (tot[i + j] || 0) + p);
+  const [tb, tp] = Object.entries(tot).sort((a, b) => b[1] - a[1])[0];
+  $("#likely").innerHTML = `<small>scores les + probables</small>` +
+    scores.slice(0, 3).map(([i, j, p], k) => `<div class="sc${k === 0 ? " first" : ""}"><b>${i} – ${j}</b><span>${pct(p, 0)}</span></div>`).join("") +
+    `<div class="tot">Total le + probable : <b>${tb} but${tb > 1 ? "s" : ""}</b> · ${pct(tp, 0)}</div>`;
   $("#aBar").outerHTML = pbar(P.ph, P.pd, P.pa).replace('class="pbar"', 'class="pbar" id="aBar" style="height:34px;font-size:13px"');
   const fx = fixtureFor();
   $("#aSource").textContent = fx && fx.juste ? "Cote juste : " + fx.source_juste : "Cote juste : modèle seul";
