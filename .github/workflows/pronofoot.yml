@@ -2,9 +2,9 @@ name: Mise à jour PronoFoot
 
 on:
   schedule:
-    - cron: "0 15 * * 2"   # mardi 15:00 (heure d'Abidjan = UTC)
-    - cron: "0 18 * * 5"   # vendredi 18:00
-    - cron: "0 11 * * 6"   # samedi 11:00
+    - cron: "47 14 * * 2"   # mardi 14:47 (heure d'Abidjan = UTC)
+    - cron: "47 17 * * 5"   # vendredi 17:47
+    - cron: " 47 17 * * 6"   # samedi 10:47
   workflow_dispatch: {}     # bouton « Run workflow » pour lancer à la main
 
 permissions:
