@@ -52,6 +52,7 @@ jobs:
           mkdir -p site
           cp PronoFoot.html site/index.html
           cp lancement.txt site/dernier_lancement.txt
+          cp icone-*.png manifest.webmanifest site/ 2>/dev/null || true
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
