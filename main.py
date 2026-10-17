@@ -227,7 +227,7 @@ def build(offline: bool = False, force_bt: bool = False, open_browser: bool = Tr
         "genere_le": dt.datetime.now().strftime("%d/%m/%Y %H:%M"),
         "donnees_jusquau": df.date.max().strftime("%Y-%m-%d"),
         "config": {"bankroll": config.BANKROLL_DEFAUT, "kelly": config.KELLY_FRACTION, "mise_max": config.MISE_MAX_PCT,
-                   "edge_min": config.EDGE_MIN, "edge_min_marche": config.EDGE_MIN_MARCHE, "cote_max": config.COTE_MAX, "proba_min": config.PROBA_MIN, "mise_fixe": config.MISE_FIXE_PCT, "books_defaut": config.BOOKMAKERS_PAR_DEFAUT,
+                   "edge_min": config.EDGE_MIN, "edge_min_marche": config.EDGE_MIN_MARCHE, "cote_max": config.COTE_MAX, "proba_min": config.PROBA_MIN, "mise_fixe": config.MISE_FIXE_PCT, "books_defaut": config.BOOKMAKERS_PAR_DEFAUT, "fuseau": config.FUSEAU_GMT,
                    "stats": {k: {"label": v[2], "lignes": v[3]} for k, v in config.COUNT_STATS.items()}},
         "ligues": leagues,
         "matchs": fixtures,

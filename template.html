@@ -96,6 +96,7 @@ td.n, th.n { text-align: right; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .mcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; cursor: pointer; text-align: left; }
 .mcard:hover { border-color: var(--accent); }
+.mcard.passe { opacity: .6; }
 .mcard .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; font-family: var(--f-display); font-size: 21px; font-weight: 600; line-height: 1.1; }
 .teams .a { text-align: right; } .teams .vs { font-size: 13px; color: var(--muted); }
@@ -414,10 +415,21 @@ function bestOffer(f, k) {
 }
 function recoLabel(f, k) { return { h: "1 · " + f.home, d: "N · match nul", a: "2 · " + f.away, o25: "Plus de 2,5 buts", u25: "Moins de 2,5 buts" }[k]; }
 let probaMin = store.get("probaMin3", C.proba_min ?? 0.40);
+/* Statut d'un match selon l'heure actuelle : à venir, en cours (≈ 2 h) ou terminé */
+function kickoff(f) {
+  if (!f.date || !f.heure) return null;
+  const t = Date.parse(`${f.date}T${f.heure}:00Z`);
+  return isNaN(t) ? null : t - (C.fuseau || 0) * 3600e3;
+}
+function statut(f) {
+  const k = kickoff(f); if (k == null) return "avenir";
+  const now = Date.now();
+  return now < k ? "avenir" : now < k + 115 * 60e3 ? "encours" : "termine";
+}
 function recommendations(all = false) {
   const out = [];
   for (const f of DATA.matchs || []) {
-    if (!f.juste) continue;
+    if (!f.juste || statut(f) !== "avenir") continue;
     for (const [k, p] of Object.entries(f.juste)) {
       const b = bestOffer(f, k); if (!b) continue;
       const s = stakeFor(p, b.odds, C.edge_min_marche);
@@ -517,7 +529,7 @@ function renderFixtures() {
   if (fxFilter !== "all" && !codes.includes(fxFilter)) fxFilter = "all";
   $("#fxLeagues").innerHTML = fx.length ? ['<button class="chip" data-l="all">Toutes</button>', ...codes.map(c => `<button class="chip" data-l="${c}">${esc(L[c].nom)}</button>`)].join("") : "";
   $$("#fxLeagues .chip").forEach(b => { b.setAttribute("aria-pressed", b.dataset.l === fxFilter); b.onclick = () => { fxFilter = b.dataset.l; store.set("fxFilter", fxFilter); renderFixtures(); }; });
-  const list = fx.filter(f => fxFilter === "all" || f.league === fxFilter);
+  const list = fx.filter(f => (fxFilter === "all" || f.league === fxFilter) && statut(f) !== "termine");
   if (!list.length) {
     $("#fxList").innerHTML = `<div class="panel empty"><h3>Aucun match à venir dans les données</h3>
       <p style="max-width:60ch;margin:0 auto 14px">Le calendrier et les cotes de référence se chargent quand vous lancez <code>python main.py</code> sur votre ordinateur (source : football-data.co.uk, publié le vendredi après-midi pour le week-end et le mardi pour les matchs de semaine). En attendant, vous pouvez analyser n'importe quelle affiche.</p>
@@ -536,13 +548,15 @@ function fxCard(f) {
   const nreco = recommendations().filter(r => r.f === f).length;
   const gap = j ? Math.max(Math.abs(p.ph - j.h), Math.abs(p.pa - j.a)) : 0;
   const tag = j ? (gap > 0.08 ? '<span class="pill warn">Modèle ≠ marché</span>' : '<span class="pill neutral">Modèle ≈ marché</span>') : '<span class="pill neutral">Sans cote de référence</span>';
-  return `<button class="mcard" data-l="${f.league}" data-h="${esc(f.home)}" data-a="${esc(f.away)}">
+  const st = statut(f);
+  const stPill = st === "encours" ? '<span class="pill bad">● En cours · trop tard pour parier</span>' : st === "termine" ? '<span class="pill neutral">Terminé</span>' : "";
+  return `<button class="mcard${st !== "avenir" ? " passe" : ""}" data-l="${f.league}" data-h="${esc(f.home)}" data-a="${esc(f.away)}">
     <div class="meta"><span>${esc(L[f.league].nom)}</span><span>${esc(f.heure || "")}</span></div>
     <div class="teams"><span>${esc(f.home)}</span><span class="vs">–</span><span class="a">${esc(f.away)}</span></div>
     ${pbar(p.ph, p.pd, p.pa)}
     <div class="mini"><span>Marché <b>${j ? pct(j.h, 0) + " · " + pct(j.d, 0) + " · " + pct(j.a, 0) : "–"}</b></span><span>+2,5 <b>${pct(p.over[2.5], 0)}</b></span><span>BTTS <b>${pct(p.btts, 0)}</b></span></div>
     ${f.offres && Object.keys(f.offres).length ? `<div class="mini"><span>Meilleures cotes <b>${["h", "d", "a"].map(k => { const b = bestOffer(f, k); return b ? dec(b.odds) : "–"; }).join(" · ")}</b></span></div>` : ""}
-    <div class="row" style="gap:6px">${nreco ? `<span class="pill good">✓ ${nreco} pari${nreco > 1 ? "s" : ""}</span>` : ""}${tag}</div></button>`;
+    <div class="row" style="gap:6px">${stPill}${nreco ? `<span class="pill good">✓ ${nreco} pari${nreco > 1 ? "s" : ""}</span>` : ""}${st === "avenir" ? tag : ""}</div></button>`;
 }
 function unknownCard(f) {
   return `<div class="mcard" style="cursor:default"><div class="meta"><span>${esc((L[f.league] || {}).nom || f.league)}</span><span>${esc(f.heure || "")}</span></div>
@@ -911,6 +925,7 @@ $("#jCsv").addEventListener("click", () => {
 
 /* ---------- Démarrage ---------- */
 renderBooks(); fillSelectors(); renderAnalyse(); renderFixtures();
+setInterval(() => { if (!$("#tab-matchs").hidden) renderFixtures(); }, 60e3);
 const hash = location.hash.slice(1);
 showTab(TABS.includes(hash) ? hash : store.get("tab", (DATA.matchs || []).length ? "matchs" : "analyse"));
 })();
