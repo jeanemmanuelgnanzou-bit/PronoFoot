@@ -1,0 +1,912 @@
+<title>PronoFoot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Layout : barre d'en-tête type tableau de score, onglets, une colonne de travail + panneau latéral sur grand écran */
+:root {
+  --bg: #f4f6f3; --surface: #ffffff; --surface-2: #eaefe9; --line: #d6ded7;
+  --fg: #13201a; --fg-2: #46564c; --muted: #6f7d74;
+  --accent: #1b5e3b; --accent-soft: #dcebe1; --on-accent: #ffffff;
+  --s1: #2a78d6; --s2: #eb6834; --draw: #9aa59e;
+  --good: #11804a; --good-soft: #d9f0e2; --warn: #9a5d00; --warn-soft: #fbecd2; --bad: #c03a3a; --bad-soft: #f8dede;
+  --heat: 27, 94, 59;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1411; --surface: #151d19; --surface-2: #1c2621; --line: #2a3730;
+  --fg: #e6eee8; --fg-2: #a7b6ac; --muted: #7f8f85;
+  --accent: #5fc28d; --accent-soft: #1d3428; --on-accent: #0b1510;
+  --s1: #3987e5; --s2: #d95926; --draw: #6f7b74;
+  --good: #46c47f; --good-soft: #17331f; --warn: #e2a640; --warn-soft: #3a2c12; --bad: #ec6b6b; --bad-soft: #3b1c1c;
+  --heat: 95, 194, 141; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #151d19; --surface-2: #1c2621; --line: #2a3730;
+  --fg: #e6eee8; --fg-2: #a7b6ac; --muted: #7f8f85;
+  --accent: #5fc28d; --accent-soft: #1d3428; --on-accent: #0b1510;
+  --s1: #3987e5; --s2: #d95926; --draw: #6f7b74;
+  --good: #46c47f; --good-soft: #17331f; --warn: #e2a640; --warn-soft: #3a2c12; --bad: #ec6b6b; --bad-soft: #3b1c1c;
+  --heat: 95, 194, 141; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 700; letter-spacing: .01em; text-wrap: balance; margin: 0; line-height: 1.1; }
+h2 { font-size: 26px; } h3 { font-size: 19px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.num, td.n, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* En-tête */
+header.top { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; }
+.top-row { display: flex; align-items: center; gap: 16px 24px; flex-wrap: wrap; padding-block: 12px; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 30px; color: var(--accent); }
+.brand small { color: var(--muted); font-size: 12px; }
+.bank { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.bank input { width: 130px; text-align: right; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-family: var(--f-mono); }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs button { border: 0; background: none; padding: 10px 14px; font-family: var(--f-display); font-size: 18px; font-weight: 600; color: var(--fg-2); border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+main { padding-block: 24px 64px; }
+.banner { background: var(--warn-soft); color: var(--fg); border: 1px solid var(--warn); border-radius: var(--r); padding: 10px 14px; margin-bottom: 20px; font-size: 13px; }
+.banner b { color: var(--warn); }
+
+/* Briques */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; min-width: 0; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.sel { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; max-width: 100%; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); padding: 7px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); padding: 4px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.neutral { background: var(--surface-2); color: var(--fg-2); }
+.muted { color: var(--muted); } .fg2 { color: var(--fg-2); }
+.scroll-x { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; white-space: nowrap; }
+td.n, th.n { text-align: right; }
+.empty { text-align: center; padding: 40px 20px; color: var(--fg-2); }
+.empty h3 { margin-bottom: 8px; color: var(--fg); }
+
+/* Matchs à venir */
+.days { display: grid; gap: 24px; }
+.day h3 { margin-bottom: 10px; color: var(--fg-2); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.mcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; cursor: pointer; text-align: left; }
+.mcard:hover { border-color: var(--accent); }
+.mcard .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.teams { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; font-family: var(--f-display); font-size: 21px; font-weight: 600; line-height: 1.1; }
+.teams .a { text-align: right; } .teams .vs { font-size: 13px; color: var(--muted); }
+.pbar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; gap: 2px; font-family: var(--f-mono); font-size: 12px; font-weight: 500; }
+.pbar span { display: flex; align-items: center; justify-content: center; color: #fff; min-width: 0; overflow: hidden; }
+.pbar .h { background: var(--s1); } .pbar .d { background: var(--draw); } .pbar .a { background: var(--s2); }
+.pkey { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.mini { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.mini b { font-family: var(--f-mono); color: var(--fg); font-weight: 500; }
+
+/* Analyse */
+.matchhead { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; }
+.matchhead .t { font-family: var(--f-display); font-size: 34px; font-weight: 700; line-height: 1; }
+.matchhead .t.a { text-align: right; }
+.matchhead .xg { font-family: var(--f-mono); font-size: 13px; color: var(--fg-2); margin-top: 4px; }
+.score { font-family: var(--f-display); font-size: 40px; font-weight: 700; background: var(--fg); color: var(--bg); padding: 2px 14px; border-radius: 8px; letter-spacing: .04em; text-align: center; }
+.score small { display: block; font-size: 11px; font-family: var(--f-body); letter-spacing: .06em; text-transform: uppercase; font-weight: 500; opacity: .75; }
+.heat { display: grid; grid-template-columns: 34px repeat(6, minmax(0, 1fr)); gap: 2px; font-family: var(--f-mono); font-size: 12px; }
+.heat div { padding: 6px 2px; text-align: center; border-radius: 4px; }
+.heat .hd { color: var(--muted); font-size: 11px; }
+.mkt input { width: 74px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); text-align: right; font-family: var(--f-mono); }
+.mkt td { white-space: nowrap; }
+.mkt tr.grp td { background: var(--surface-2); font-family: var(--f-display); font-size: 16px; font-weight: 600; padding-top: 6px; padding-bottom: 6px; }
+.gtoggle { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; color: inherit; }
+.mkt tr.grp td .pill { margin-left: 8px; font-family: var(--f-body); }
+.rules ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.rules li::marker { font-family: var(--f-mono); color: var(--accent); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-family: var(--f-mono); }
+
+/* Équipes */
+.form { display: inline-flex; gap: 3px; }
+.form i { width: 18px; height: 18px; border-radius: 4px; font-style: normal; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.form .V { background: var(--good-soft); color: var(--good); } .form .N { background: var(--surface-2); color: var(--fg-2); } .form .D { background: var(--bad-soft); color: var(--bad); }
+.tlink { border: 0; background: none; padding: 0; font-weight: 600; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.tlink:hover { color: var(--accent); text-decoration-color: var(--accent); }
+.ratebar { position: relative; height: 8px; background: var(--surface-2); border-radius: 4px; width: 90px; overflow: hidden; }
+.ratebar span { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+svg text { font-family: var(--f-body); }
+
+/* Fiabilité */
+.verdict { border-left: 4px solid var(--warn); background: var(--warn-soft); }
+.verdict.ok { border-left-color: var(--good); background: var(--good-soft); }
+.verdict h2 { margin-bottom: 8px; }
+.verdict p { margin: 0 0 8px; max-width: 75ch; }
+.sens td { min-width: 110px; }
+details.panel summary::marker { color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+.tile .v { font-family: var(--f-display); font-size: 32px; font-weight: 700; line-height: 1.1; }
+.tile .s { font-size: 12px; color: var(--muted); }
+.chartbox { position: relative; height: 280px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--fg-2); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 20px; }
+
+/* Journal */
+.jform { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+.jform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.jform input, .jform select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.toast { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 50; }
+
+@media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  header.top { position: static; }
+  .matchhead .t { font-size: 24px; } .score { font-size: 30px; }
+  .bank { margin-left: 0; width: 100%; } .bank input { flex: 1; }
+  .teams { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="top-row">
+      <div class="brand"><h1>PronoFoot</h1><small id="dataInfo"></small></div>
+      <div class="row" style="gap:8px" id="booksBox" hidden><span class="label">Mes bookmakers</span><div class="chips" id="myBooks"></div></div>
+      <div class="bank">
+        <label class="label" for="bankroll">Bankroll (FCFA)</label>
+        <input id="bankroll" inputmode="numeric">
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="matchs">Matchs à venir</button>
+      <button role="tab" data-tab="analyse">Analyser un match</button>
+      <button role="tab" data-tab="equipes">Équipes</button>
+      <button role="tab" data-tab="fiabilite">Fiabilité</button>
+      <button role="tab" data-tab="journal">Mon journal</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="demoBanner" class="banner" hidden></div>
+
+  <section id="tab-matchs" hidden>
+    <div class="row" style="justify-content:space-between; margin-bottom:16px">
+      <h2>Matchs à venir</h2>
+      <div class="chips" id="fxLeagues"></div>
+    </div>
+    <div id="recos" style="margin-bottom:24px"></div>
+    <div id="fxList" class="days"></div>
+  </section>
+
+  <section id="tab-analyse" hidden>
+    <div class="grid-2">
+      <div class="stack">
+        <div class="panel row" style="gap:10px">
+          <select class="sel" id="aLeague" aria-label="Championnat"></select>
+          <select class="sel" id="aHome" aria-label="Équipe à domicile"></select>
+          <span class="muted">contre</span>
+          <select class="sel" id="aAway" aria-label="Équipe à l'extérieur"></select>
+          <span id="aSource" class="pill neutral"></span>
+        </div>
+        <div class="panel stack">
+          <div class="matchhead">
+            <div><div class="t" id="hName"></div><div class="xg" id="hXg"></div></div>
+            <div class="score"><span id="likely"></span><small>score le + probable</small></div>
+            <div><div class="t a" id="aName"></div><div class="xg" id="aXg" style="text-align:right"></div></div>
+          </div>
+          <div>
+            <div class="pbar" id="aBar"></div>
+            <div class="pkey"><span>1 · victoire domicile</span><span>N · nul</span><span>2 · victoire extérieur</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px">
+            <h3>Marchés : saisissez vos cotes 1xBet / Betclic</h3>
+            <span class="muted" style="font-size:12px">Ne pariez que sur les lignes « ✓ PARIER »</span>
+          </div>
+          <div class="scroll-x"><table class="mkt" id="mktTable"></table></div>
+        </div>
+      </div>
+      <aside class="stack">
+        <div class="panel">
+          <h3 style="margin-bottom:10px">Scores exacts</h3>
+          <div class="heat" id="heat" aria-label="Probabilité de chaque score"></div>
+          <p class="muted" style="font-size:12px; margin:8px 0 0">Lignes : buts domicile · colonnes : buts extérieur</p>
+        </div>
+        <div class="panel rules">
+          <h3 style="margin-bottom:10px">Règles de la stratégie</h3>
+          <ol>
+            <li>Ne parier que si votre cote dépasse la <b>cote juste</b> d'au moins <span id="rEdge"></span>.</li>
+            <li>Et seulement si le pari a au moins <b><span id="rProba"></span> de chances</b> de passer.</li>
+            <li>La cote juste vient d'abord de <b>Pinnacle</b> (le marché le plus précis), le modèle sert de second avis.</li>
+            <li>Mise : <b>¼ de Kelly</b>, jamais plus de <span id="rMax"></span> de la bankroll.</li>
+            <li>Pas de cote au-dessus de <span id="rCote"></span>, pas de combinés.</li>
+            <li>Tout noter dans le journal. Juger sur la CLV après 50 à 100 paris, pas sur une semaine.</li>
+          </ol>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="tab-equipes" hidden>
+    <div class="row" style="justify-content:space-between; margin-bottom:16px">
+      <h2 id="eTitle">Équipes</h2>
+      <select class="sel" id="eLeague" aria-label="Championnat"></select>
+    </div>
+    <div class="two">
+      <div class="panel" style="padding:0">
+        <div class="scroll-x"><table id="eTable"></table></div>
+      </div>
+      <div class="panel">
+        <h3>Profil des équipes</h3>
+        <p class="muted" style="margin:4px 0 10px; font-size:12px">Buts attendus contre une équipe moyenne, sur terrain neutre. En haut à droite : attaque forte et défense solide.</p>
+        <div id="eScatter"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-fiabilite" hidden>
+    <div class="stack" id="fiab"></div>
+  </section>
+
+  <section id="tab-journal" hidden>
+    <div class="stack">
+      <div class="panel">
+        <h3 style="margin-bottom:12px">Ajouter un pari</h3>
+        <form class="jform" id="jForm">
+          <label>Date<input type="date" id="jDate" required></label>
+          <label style="grid-column: span 2">Match<input id="jMatch" placeholder="Arsenal - Chelsea" required></label>
+          <label>Marché<input id="jMarket" placeholder="1, +2.5, Corners +9.5…" required></label>
+          <label>Cote<input id="jOdds" inputmode="decimal" placeholder="2,10" required></label>
+          <label>Mise (FCFA)<input id="jStake" inputmode="numeric" placeholder="2000" required></label>
+          <label>Proba estimée<input id="jProb" inputmode="decimal" placeholder="optionnel, ex. 52"></label>
+          <button class="btn" type="submit">Ajouter</button>
+        </form>
+      </div>
+      <div class="tiles" id="jTiles"></div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between; margin-bottom:8px">
+          <h3>Évolution de la bankroll</h3>
+          <button class="btn ghost sm" id="jCsv" type="button">Copier en CSV</button>
+        </div>
+        <div class="chartbox"><canvas id="jChart" aria-label="Évolution de la bankroll"></canvas></div>
+      </div>
+      <div class="panel" style="padding:0"><div class="scroll-x"><table id="jTable"></table></div></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+</script>
+<script>
+(function () {
+if (!DATA) { document.querySelector("main").innerHTML = '<div class="panel empty"><h3>Aucune donnée</h3>Lancez <code>python main.py</code> pour générer le tableau de bord.</div>'; return; }
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const C = DATA.config, L = DATA.ligues, BT = DATA.backtest || {};
+const LCODES = Object.keys(L);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("pf_" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("pf_" + k, JSON.stringify(v)); } catch (e) {} }
+};
+const pct = (x, d = 1) => x == null || !isFinite(x) ? "–" : (x * 100).toFixed(d).replace(".", ",") + " %";
+const dec = (x, d = 2) => x == null || !isFinite(x) ? "–" : x.toFixed(d).replace(".", ",");
+const fcfa = x => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(x)) + " F";
+const parseNum = s => { const v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isFinite(v) ? v : null; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); }
+
+/* ---------- Mathématiques des modèles (identiques à models.py) ---------- */
+const LG_COEF = [676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function lgamma(z) { if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lgamma(1 - z); z -= 1; let x = 0.99999999999980993; for (let i = 0; i < 8; i++) x += LG_COEF[i] / (z + i + 1); const t = z + 7.5; return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x); }
+const pois = (k, l) => Math.exp(k * Math.log(l) - l - lgamma(k + 1));
+function countPmf(k, m, r) { if (!r || r <= 0 || r > 1e4) return pois(k, m); return Math.exp(lgamma(k + r) - lgamma(r) - lgamma(k + 1) + r * Math.log(r / (r + m)) + k * Math.log(m / (r + m))); }
+function rates(par, home, away) {
+  const th = par.teams[home] || par.prior, ta = par.teams[away] || par.prior;
+  return [Math.exp(par.mu + par.home + th[0] + ta[1]), Math.exp(par.mu + ta[0] + th[1])];
+}
+function predict(code, home, away) {
+  const lg = L[code]; const [lh, la] = rates(lg, home, away); const rho = lg.rho || 0, N = 11;
+  const M = []; let s = 0;
+  for (let i = 0; i < N; i++) { M[i] = []; for (let j = 0; j < N; j++) {
+    let p = pois(i, lh) * pois(j, la);
+    if (i === 0 && j === 0) p *= 1 - lh * la * rho; else if (i === 0 && j === 1) p *= 1 + lh * rho;
+    else if (i === 1 && j === 0) p *= 1 + la * rho; else if (i === 1 && j === 1) p *= 1 - rho;
+    M[i][j] = p; s += p; } }
+  const out = { lh, la, M, ph: 0, pd: 0, pa: 0, btts: 0, over: {} , best: [0, 0, 0] };
+  for (const l of [0.5, 1.5, 2.5, 3.5, 4.5]) out.over[l] = 0;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const p = M[i][j] / s; M[i][j] = p;
+    if (i > j) out.ph += p; else if (i === j) out.pd += p; else out.pa += p;
+    if (i > 0 && j > 0) out.btts += p;
+    for (const l in out.over) if (i + j > l) out.over[l] += p;
+    if (p > out.best[2]) out.best = [i, j, p];
+  }
+  out.stats = {};
+  for (const [key, par] of Object.entries(lg.counts || {})) {
+    const [mh, ma] = rates(par, home, away); const m = mh + ma; const lines = C.stats[key].lignes;
+    const ov = {}; let cdf = 0; const cum = [];
+    for (let k = 0; k <= 90; k++) { cdf += countPmf(k, m, par.disp); cum[k] = cdf; }
+    for (const l of lines) ov[l] = 1 - cum[Math.floor(l)];
+    out.stats[key] = { mh, ma, m, over: ov };
+  }
+  return out;
+}
+
+/* ---------- Value et mise ---------- */
+function stakeFor(p, odds, threshold) {
+  if (!p || !odds || odds <= 1) return null;
+  const edge = p * odds - 1;
+  if (edge > 0.15) return { edge, stake: 0, verdict: "suspect" };
+  if (odds > C.cote_max) return { edge, stake: 0, verdict: "haute" };
+  if (edge < threshold) return { edge, stake: 0, verdict: edge > 0 ? "faible" : "non" };
+  const f = Math.min(C.kelly * edge / (odds - 1), C.mise_max);
+  return { edge, stake: f * bankroll(), verdict: "value" };
+}
+const bankroll = () => parseNum($("#bankroll").value) || C.bankroll;
+
+/* ---------- Navigation ---------- */
+const TABS = ["matchs", "analyse", "equipes", "fiabilite", "journal"];
+function showTab(t) {
+  if (!TABS.includes(t)) t = "matchs";
+  $$("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  TABS.forEach(x => $("#tab-" + x).hidden = x !== t);
+  store.set("tab", t);
+  if (t === "fiabilite") renderFiab();
+  if (t === "journal") renderJournal();
+  if (t === "equipes") renderTeams();
+}
+$$("nav.tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* ---------- En-tête ---------- */
+$("#dataInfo").textContent = "Données jusqu'au " + new Date(DATA.donnees_jusquau).toLocaleDateString("fr-FR") + " · mis à jour le " + DATA.genere_le;
+$("#bankroll").value = new Intl.NumberFormat("fr-FR").format(store.get("bankroll", C.bankroll));
+$("#bankroll").addEventListener("change", e => { const v = parseNum(e.target.value) || C.bankroll; store.set("bankroll", v); e.target.value = new Intl.NumberFormat("fr-FR").format(v); renderMarkets(); renderFixtures(); });
+$("#rEdge").textContent = pct(C.edge_min_marche, 0); $("#rProba").textContent = pct(C.proba_min ?? 0.40, 0); $("#rMax").textContent = pct(C.mise_max, 0); $("#rCote").textContent = dec(C.cote_max, 1);
+if (DATA.demo) { const b = $("#demoBanner"); b.hidden = false; b.innerHTML = DATA.demo; }
+
+/* ---------- Cotes de vos bookmakers ---------- */
+const MK = { "1": "h", "N": "d", "2": "a", "o2.5": "o25", "u2.5": "u25" };
+const ALL_BOOKS = [...new Set((DATA.matchs || []).flatMap(f => Object.keys(f.offres || {})))];
+let myBooks = store.get("myBooks", C.books_defaut || ALL_BOOKS).filter(b => ALL_BOOKS.includes(b));
+if (!myBooks.length) myBooks = ALL_BOOKS.slice();
+function renderBooks() {
+  $("#booksBox").hidden = ALL_BOOKS.length < 2;
+  $("#myBooks").innerHTML = ALL_BOOKS.map(b => `<button class="chip" data-b="${esc(b)}" aria-pressed="${myBooks.includes(b)}">${esc(b)}</button>`).join("");
+  $$("#myBooks .chip").forEach(c => c.onclick = () => {
+    const b = c.dataset.b;
+    myBooks = myBooks.includes(b) ? myBooks.filter(x => x !== b) : [...myBooks, b];
+    if (!myBooks.length) myBooks = [b];
+    store.set("myBooks", myBooks);
+    for (const k in userOdds) delete userOdds[k];
+    renderBooks(); renderFixtures(); renderMarkets();
+  });
+}
+function bestOffer(f, k) {
+  let best = null;
+  for (const [book, o] of Object.entries((f && f.offres) || {})) if (myBooks.includes(book) && o[k] && (!best || o[k] > best.odds)) best = { book, odds: o[k] };
+  return best;
+}
+function recoLabel(f, k) { return { h: "1 · " + f.home, d: "N · match nul", a: "2 · " + f.away, o25: "Plus de 2,5 buts", u25: "Moins de 2,5 buts" }[k]; }
+let probaMin = store.get("probaMin3", C.proba_min ?? 0.40);
+function recommendations(all = false) {
+  const out = [];
+  for (const f of DATA.matchs || []) {
+    if (!f.juste) continue;
+    for (const [k, p] of Object.entries(f.juste)) {
+      const b = bestOffer(f, k); if (!b) continue;
+      const s = stakeFor(p, b.odds, C.edge_min_marche);
+      if (s && s.verdict === "value" && (all || p >= probaMin)) out.push({ f, k, p, ...b, edge: s.edge, stake: s.stake });
+    }
+  }
+  return out.sort((x, y) => (x.f.date + x.f.heure).localeCompare(y.f.date + y.f.heure) || y.edge - x.edge);
+}
+function renderRecos() {
+  const live = DATA.cotes_live;
+  const info = live ? `Cotes du ${new Date(live.maj).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}${live.credits != null ? ` · ${live.credits} crédits restants ce mois-ci` : ""}` : "Cotes en direct désactivées : ajoutez votre clé The Odds API dans config.py";
+  const recos = recommendations();
+  const hidden = recommendations(true).length - recos.length;
+  let h = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>Paris recommandés</h2><span class="muted" style="font-size:12px">${esc(info)}</span></div>
+    <div class="row" style="margin-bottom:12px;gap:12px"><label for="probaMin" class="fg2" style="font-size:13px">Ne montrer que les paris qui passent au moins</label>
+      <input type="range" id="probaMin" min="0" max="0.6" step="0.05" value="${probaMin}" style="width:160px;accent-color:var(--accent)">
+      <b class="mono" id="probaMinV">${Math.round(probaMin * 100)} % du temps</b>
+      ${hidden ? `<span class="muted" style="font-size:12px">${hidden} pari${hidden > 1 ? "s" : ""} masqué${hidden > 1 ? "s" : ""} par ce seuil</span>` : ""}</div>`;
+  if (!recos.length) {
+    h += hidden ? `<p class="fg2" style="margin:0">Aucun pari au-dessus de votre seuil. Baissez le curseur pour voir les ${hidden} autre${hidden > 1 ? "s" : ""}.</p></div>` : `<p class="fg2" style="margin:0">Aucun pour l'instant : vos bookmakers ne paient nulle part au moins ${pct(C.edge_min_marche, 0)} de plus que le prix juste Pinnacle. C'est fréquent ; relancez plus près des matchs, les cotes bougent.</p></div>`;
+  } else {
+    h += `<p class="muted" style="margin:0 0 10px;font-size:12px">Vérifiez la cote sur le site avant de valider : si elle a baissé sous la cote minimale, ne pariez pas.</p><div class="scroll-x"><table><thead><tr><th>Match</th><th>Pari</th><th class="n">Chances</th><th>Chez</th><th class="n">Cote</th><th class="n">Cote minimale</th><th class="n">Value</th><th class="n">Mise</th><th></th></tr></thead><tbody>` +
+      recos.map((r, i) => `<tr><td><b>${esc(r.f.home)} – ${esc(r.f.away)}</b><div class="muted" style="font-size:12px">${esc(L[r.f.league].nom)} · ${new Date(r.f.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${esc(r.f.heure || "")}</div></td>
+        <td>${esc(recoLabel(r.f, r.k))}</td><td class="n">${pct(r.p, 0)}</td><td><b>${esc(r.book)}</b></td><td class="n"><b>${dec(r.odds)}</b></td>
+        <td class="n">${dec((1 + C.edge_min_marche) / r.p)}</td><td class="n" style="color:var(--good)">+${pct(r.edge)}</td><td class="n"><b>${fcfa(r.stake)}</b></td>
+        <td><button class="btn ghost sm" data-reco="${i}">Noter</button></td></tr>`).join("") + "</tbody></table></div></div>";
+  }
+  $("#recos").innerHTML = h;
+  const sl = $("#probaMin");
+  sl.oninput = () => { $("#probaMinV").textContent = Math.round(+sl.value * 100) + " % du temps"; };
+  sl.onchange = () => { probaMin = +sl.value; store.set("probaMin3", probaMin); renderFixtures(); renderMarkets(); };
+  $$("#recos [data-reco]").forEach(b => b.onclick = () => {
+    const r = recos[+b.dataset.reco];
+    const mid = Object.keys(MK).find(m => MK[m] === r.k);
+    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: recoLabel(r.f, r.k), odds: r.odds, stake: Math.round(r.stake / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book });
+    toast("Pari ajouté au journal"); b.disabled = true; b.textContent = "Noté";
+  });
+}
+
+/* ---------- Les plus probables ---------- */
+let probSeuil = store.get("probSeuil", 0.65);
+function probables() {
+  const out = [];
+  for (const f of DATA.matchs || []) {
+    const j = f.juste; if (!j || f.connu === false && !L[f.league]) continue;
+    const cand = [["h", j.h], ["d", j.d], ["a", j.a], ["o25", j.o25], ["u25", j.u25],
+                  ["1N", j.h + j.d], ["N2", j.d + j.a], ["12", j.h + j.a]];
+    for (const [k, p] of cand) {
+      if (p == null || p < probSeuil) continue;
+      const b = MK_PRICED.includes(k) ? bestOffer(f, k) : null;
+      out.push({ f, k, p, book: b && b.book, odds: b && b.odds, edge: b ? p * b.odds - 1 : null });
+    }
+  }
+  return out.sort((x, y) => y.p - x.p).slice(0, 40);
+}
+const MK_PRICED = ["h", "d", "a", "o25", "u25"];
+function probLabel(f, k) { return { "1N": `1N · ${f.home} ou nul`, "N2": `N2 · nul ou ${f.away}`, "12": "12 · pas de match nul" }[k] || recoLabel(f, k); }
+function renderProbables() {
+  if (!(DATA.matchs || []).some(f => f.juste)) { $("#probables").innerHTML = ""; return; }
+  const rows = probables(), mise = bankroll() * (C.mise_fixe || 0.01);
+  let h = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h2>Les plus probables</h2><span class="muted" style="font-size:12px">Chances calculées à partir des cotes Pinnacle · mise fixe ${pct(C.mise_fixe || 0.01, 0)} de la bankroll</span></div>
+    <div class="row" style="margin-bottom:12px;gap:12px"><label for="probSeuil" class="fg2" style="font-size:13px">Chances de passer au moins</label>
+      <input type="range" id="probSeuil" min="0.5" max="0.9" step="0.05" value="${probSeuil}" style="width:160px;accent-color:var(--accent)">
+      <b class="mono" id="probSeuilV">${Math.round(probSeuil * 100)} %</b></div>
+    <p class="muted" style="margin:0 0 10px;font-size:12px">Vert : le prix est correct, vous pouvez jouer. Orange : un peu cher, mieux vaut passer. Rouge : trop cher, à éviter. Double chance : la cote n'est pas fournie, vérifiez-la sur le site.</p>`;
+  if (!rows.length) h += `<p class="fg2" style="margin:0">Aucun pari au-dessus de ce seuil. Baissez le curseur.</p></div>`;
+  else h += `<div class="scroll-x"><table><thead><tr><th>Match</th><th>Pari</th><th class="n">Chances</th><th>Chez</th><th class="n">Cote</th><th class="n">Cote juste</th><th>Prix</th><th class="n">Mise</th><th></th></tr></thead><tbody>` +
+    rows.map((r, i) => {
+      let pill, m = "–", btn = "";
+      const fair = 1 / r.p;
+      if (r.odds == null) { pill = `<span class="pill neutral">À vérifier : jouez si cote ≥ ${dec(fair)}</span>`; m = `<span class="fg2">${fcfa(mise)}</span>`; }
+      else if (r.edge >= 0) { pill = `<span class="pill good">✓ Prix correct</span>`; m = `<b>${fcfa(mise)}</b>`; btn = `<button class="btn ghost sm" data-prob="${i}">Noter</button>`; }
+      else if (r.edge >= -0.03) pill = `<span class="pill warn">Un peu cher</span>`;
+      else pill = `<span class="pill bad">✕ Trop cher</span>`;
+      return `<tr><td><b>${esc(r.f.home)} – ${esc(r.f.away)}</b><div class="muted" style="font-size:12px">${esc((L[r.f.league] || {}).nom || r.f.league)} · ${new Date(r.f.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${esc(r.f.heure || "")}</div></td>
+        <td>${esc(probLabel(r.f, r.k))}</td><td class="n"><b>${pct(r.p, 0)}</b></td><td>${r.book ? esc(r.book) : '<span class="muted">–</span>'}</td>
+        <td class="n">${r.odds ? `<b>${dec(r.odds)}</b>` : '<span class="muted">–</span>'}</td><td class="n">${dec(fair)}</td><td>${pill}</td><td class="n">${m}</td><td>${btn}</td></tr>`;
+    }).join("") + "</tbody></table></div></div>";
+  $("#probables").innerHTML = h;
+  const sl = $("#probSeuil");
+  sl.oninput = () => { $("#probSeuilV").textContent = Math.round(+sl.value * 100) + " %"; };
+  sl.onchange = () => { probSeuil = +sl.value; store.set("probSeuil", probSeuil); renderProbables(); };
+  $$("#probables [data-prob]").forEach(b => b.onclick = () => {
+    const r = rows[+b.dataset.prob];
+    const mid = Object.keys(MK).find(x => MK[x] === r.k);
+    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: probLabel(r.f, r.k), odds: r.odds, stake: Math.round(mise / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book });
+    toast("Pari ajouté au journal"); b.disabled = true; b.textContent = "Noté";
+  });
+}
+
+/* ---------- Matchs à venir ---------- */
+let fxFilter = store.get("fxFilter", "all");
+function renderFixtures() {
+  renderRecos();
+  const fx = DATA.matchs || [];
+  const codes = [...new Set(fx.map(f => f.league))];
+  if (fxFilter !== "all" && !codes.includes(fxFilter)) fxFilter = "all";
+  $("#fxLeagues").innerHTML = fx.length ? ['<button class="chip" data-l="all">Toutes</button>', ...codes.map(c => `<button class="chip" data-l="${c}">${esc(L[c].nom)}</button>`)].join("") : "";
+  $$("#fxLeagues .chip").forEach(b => { b.setAttribute("aria-pressed", b.dataset.l === fxFilter); b.onclick = () => { fxFilter = b.dataset.l; store.set("fxFilter", fxFilter); renderFixtures(); }; });
+  const list = fx.filter(f => fxFilter === "all" || f.league === fxFilter);
+  if (!list.length) {
+    $("#fxList").innerHTML = `<div class="panel empty"><h3>Aucun match à venir dans les données</h3>
+      <p style="max-width:60ch;margin:0 auto 14px">Le calendrier et les cotes de référence se chargent quand vous lancez <code>python main.py</code> sur votre ordinateur (source : football-data.co.uk, publié le vendredi après-midi pour le week-end et le mardi pour les matchs de semaine). En attendant, vous pouvez analyser n'importe quelle affiche.</p>
+      <button class="btn" id="goAnalyse">Analyser un match</button></div>`;
+    $("#goAnalyse").onclick = () => showTab("analyse");
+    return;
+  }
+  const byDay = {};
+  list.forEach(f => (byDay[f.date] = byDay[f.date] || []).push(f));
+  $("#fxList").innerHTML = Object.entries(byDay).map(([d, ms]) => `<div class="day"><h3>${new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</h3><div class="cards">${ms.map(fxCard).join("")}</div></div>`).join("");
+  $$("button.mcard").forEach(c => c.onclick = () => { openMatch(c.dataset.l, c.dataset.h, c.dataset.a); });
+}
+function fxCard(f) {
+  if (!L[f.league] || f.connu === false) return unknownCard(f);
+  const p = predict(f.league, f.home, f.away), j = f.juste;
+  const nreco = recommendations().filter(r => r.f === f).length;
+  const gap = j ? Math.max(Math.abs(p.ph - j.h), Math.abs(p.pa - j.a)) : 0;
+  const tag = j ? (gap > 0.08 ? '<span class="pill warn">Modèle ≠ marché</span>' : '<span class="pill neutral">Modèle ≈ marché</span>') : '<span class="pill neutral">Sans cote de référence</span>';
+  return `<button class="mcard" data-l="${f.league}" data-h="${esc(f.home)}" data-a="${esc(f.away)}">
+    <div class="meta"><span>${esc(L[f.league].nom)}</span><span>${esc(f.heure || "")}</span></div>
+    <div class="teams"><span>${esc(f.home)}</span><span class="vs">–</span><span class="a">${esc(f.away)}</span></div>
+    ${pbar(p.ph, p.pd, p.pa)}
+    <div class="mini"><span>Marché <b>${j ? pct(j.h, 0) + " · " + pct(j.d, 0) + " · " + pct(j.a, 0) : "–"}</b></span><span>+2,5 <b>${pct(p.over[2.5], 0)}</b></span><span>BTTS <b>${pct(p.btts, 0)}</b></span></div>
+    ${f.offres && Object.keys(f.offres).length ? `<div class="mini"><span>Meilleures cotes <b>${["h", "d", "a"].map(k => { const b = bestOffer(f, k); return b ? dec(b.odds) : "–"; }).join(" · ")}</b></span></div>` : ""}
+    <div class="row" style="gap:6px">${nreco ? `<span class="pill good">✓ ${nreco} pari${nreco > 1 ? "s" : ""}</span>` : ""}${tag}</div></button>`;
+}
+function unknownCard(f) {
+  return `<div class="mcard" style="cursor:default"><div class="meta"><span>${esc((L[f.league] || {}).nom || f.league)}</span><span>${esc(f.heure || "")}</span></div>
+    <div class="teams"><span>${esc(f.home)}</span><span class="vs">–</span><span class="a">${esc(f.away)}</span></div>
+    <p class="muted" style="margin:0;font-size:12px">Nom d'équipe non reconnu : complétez correspondances.csv dans le dossier de l'outil, puis relancez.</p></div>`;
+}
+function pbar(h, d, a) {
+  const lab = x => x >= 0.12 ? pct(x, 0) : "";
+  return `<div class="pbar" role="img" aria-label="1 ${pct(h, 0)}, N ${pct(d, 0)}, 2 ${pct(a, 0)}"><span class="h" style="flex:${h}">${lab(h)}</span><span class="d" style="flex:${d}">${lab(d)}</span><span class="a" style="flex:${a}">${lab(a)}</span></div>`;
+}
+
+/* ---------- Analyse ---------- */
+const st = store.get("analyse", {});
+let cur = { l: st.l && L[st.l] ? st.l : LCODES[0], h: st.h, a: st.a };
+const userOdds = {}, userSrc = {};
+function teamList(code) { const lg = L[code]; return (lg.en_cours && lg.en_cours.length ? lg.en_cours : Object.keys(lg.teams)).slice().sort((x, y) => x.localeCompare(y, "fr")); }
+function fillSelectors() {
+  $("#aLeague").innerHTML = LCODES.map(c => `<option value="${c}">${esc(L[c].nom)} · ${esc(L[c].pays)}</option>`).join("");
+  $("#aLeague").value = cur.l;
+  const teams = teamList(cur.l);
+  if (!teams.includes(cur.h)) cur.h = teams[0];
+  if (!teams.includes(cur.a) || cur.a === cur.h) cur.a = teams.find(t => t !== cur.h);
+  const opts = teams.map(t => `<option>${esc(t)}</option>`).join("");
+  $("#aHome").innerHTML = opts; $("#aAway").innerHTML = opts;
+  $("#aHome").value = cur.h; $("#aAway").value = cur.a;
+}
+$("#aLeague").addEventListener("change", e => { cur.l = e.target.value; cur.h = cur.a = null; fillSelectors(); renderAnalyse(); });
+$("#aHome").addEventListener("change", e => { cur.h = e.target.value; renderAnalyse(); });
+$("#aAway").addEventListener("change", e => { cur.a = e.target.value; renderAnalyse(); });
+function openMatch(l, h, a) { cur = { l, h, a }; fillSelectors(); renderAnalyse(); showTab("analyse"); }
+function fixtureFor() { return (DATA.matchs || []).find(f => f.league === cur.l && f.home === cur.h && f.away === cur.a); }
+
+let P = null;
+function renderAnalyse() {
+  store.set("analyse", cur);
+  P = predict(cur.l, cur.h, cur.a);
+  $("#hName").textContent = cur.h; $("#aName").textContent = cur.a;
+  $("#hXg").textContent = "xG " + dec(P.lh); $("#aXg").textContent = "xG " + dec(P.la);
+  $("#likely").textContent = P.best[0] + " – " + P.best[1];
+  $("#aBar").outerHTML = pbar(P.ph, P.pd, P.pa).replace('class="pbar"', 'class="pbar" id="aBar" style="height:34px;font-size:13px"');
+  const fx = fixtureFor();
+  $("#aSource").textContent = fx && fx.juste ? "Cote juste : " + fx.source_juste : "Cote juste : modèle seul";
+  $("#aSource").className = "pill " + (fx && fx.juste ? "good" : "warn");
+  // carte de chaleur des scores
+  let h = '<div class="hd"></div>' + [0, 1, 2, 3, 4, 5].map(j => `<div class="hd">${j}</div>`).join("");
+  const mx = Math.max(...P.M.slice(0, 6).flatMap(r => r.slice(0, 6)));
+  for (let i = 0; i < 6; i++) { h += `<div class="hd">${i}</div>`; for (let j = 0; j < 6; j++) { const p = P.M[i][j]; h += `<div title="${i}-${j} : ${pct(p)}" style="background:rgba(${css("--heat")},${(0.06 + 0.5 * p / mx).toFixed(3)})">${p >= 0.005 ? (p * 100).toFixed(1).replace(".", ",") : "·"}</div>`; } }
+  $("#heat").innerHTML = h;
+  renderMarkets();
+}
+
+function reliability(code, group) {
+  const f = (L[code] || {}).fiabilite || {};
+  if (group === "1x2") {
+    if (f.logloss_marche == null || f.logloss_modele == null) return null;
+    return f.logloss_modele <= f.logloss_marche ? ["good", "Modèle au niveau du marché"] : ["warn", "Le marché fait mieux que le modèle"];
+  }
+  const s = (f.stats || {})[group]; if (!s) return null;
+  const gain = 1 - s.mae / s.mae_naif;
+  return gain > 0.05 ? ["good", "Fiabilité correcte"] : gain > 0.01 ? ["warn", "Fiabilité faible"] : ["bad", "Pas mieux que la moyenne de la ligue"];
+}
+
+function marketRows() {
+  const fx = fixtureFor(), j = fx && fx.juste;
+  const rows = [];
+  const add = (grp, id, label, pm, pj) => rows.push({ grp, id, label, pm, pj });
+  rows.push({ head: "Résultat", rel: reliability(cur.l, "1x2") });
+  add("1x2", "1", "1 · " + cur.h, P.ph, j && j.h);
+  add("1x2", "N", "N · Match nul", P.pd, j && j.d);
+  add("1x2", "2", "2 · " + cur.a, P.pa, j && j.a);
+  add("1x2", "1N", "1N · double chance", P.ph + P.pd, j && j.h + j.d);
+  add("1x2", "N2", "N2 · double chance", P.pd + P.pa, j && j.d + j.a);
+  add("1x2", "12", "12 · pas de nul", P.ph + P.pa, j && j.h + j.a);
+  rows.push({ head: "Buts", rel: null });
+  for (const l of [1.5, 2.5, 3.5]) {
+    add("buts", "o" + l, "Plus de " + dec(l, 1) + " buts", P.over[l], l === 2.5 && j && j.o25);
+    add("buts", "u" + l, "Moins de " + dec(l, 1) + " buts", 1 - P.over[l], l === 2.5 && j && j.u25);
+  }
+  add("buts", "btts", "Les deux équipes marquent", P.btts, null);
+  add("buts", "nbtts", "Au moins une équipe ne marque pas", 1 - P.btts, null);
+  for (const [key, s] of Object.entries(P.stats)) {
+    rows.push({ head: C.stats[key].label, rel: reliability(cur.l, key), sub: `attendu ${dec(s.m, 1)} (${dec(s.mh, 1)} + ${dec(s.ma, 1)})` });
+    for (const l of C.stats[key].lignes) {
+      add(key, key + "o" + l, "Plus de " + dec(l, 1), s.over[l], null);
+      add(key, key + "u" + l, "Moins de " + dec(l, 1), 1 - s.over[l], null);
+    }
+  }
+  return rows;
+}
+
+const openGroups = new Set(store.get("openGroups", ["Résultat", "Buts"]));
+function renderMarkets() {
+  if (!P) return;
+  const rows = marketRows();
+  const key = `${cur.l}|${cur.h}|${cur.a}`;
+  const od = userOdds[key] = userOdds[key] || {};
+  const src = userSrc[key] = userSrc[key] || {};
+  const fxm = fixtureFor();
+  if (fxm && fxm.offres) for (const [id, k] of Object.entries(MK)) if (od[id] == null) { const b = bestOffer(fxm, k); if (b) { od[id] = dec(b.odds); src[id] = b.book; } }
+  let html = `<thead><tr><th>Marché</th><th class="n">Modèle</th><th class="n">Marché</th><th class="n">Cote juste</th><th class="n">Votre cote</th><th class="n">Value</th><th>Verdict</th><th class="n">Mise</th></tr></thead><tbody>`;
+  let open = true;
+  for (const r of rows) {
+    if (r.head) { open = openGroups.has(r.head); html += `<tr class="grp"><td colspan="8"><button class="gtoggle" data-g="${esc(r.head)}" aria-expanded="${open}">${open ? "▾" : "▸"} ${esc(r.head)}</button>${r.sub ? ` <span class="muted" style="font-family:var(--f-body);font-size:12px;font-weight:400">· ${r.sub}</span>` : ""}${r.rel ? `<span class="pill ${r.rel[0]}">${r.rel[1]}</span>` : ""}</td></tr>`; continue; }
+    if (!open) continue;
+    const pref = r.pj || r.pm, thr = r.pj ? C.edge_min_marche : C.edge_min;
+    const o = parseNum(od[r.id]);
+    const s = o ? stakeFor(pref, o, thr) : null;
+    let verdict = '<span class="muted">–</span>', val = "–", mise = "–";
+    if (s) {
+      val = `<span style="color:var(--${s.edge >= 0 ? "good" : "bad"})">${s.edge >= 0 ? "+" : ""}${pct(s.edge)}</span>`;
+      if (s.verdict === "value" && r.pj && r.pj < probaMin) { verdict = `<span class="pill neutral" title="Value réelle, mais sous votre seuil de probabilité">Value · sous votre seuil (${Math.round(probaMin * 100)} %)</span>`; }
+      else if (s.verdict === "value" && r.pj) { verdict = `<span class="pill good">✓ PARIER</span>`; mise = `<b>${fcfa(s.stake)}</b> <button class="btn ghost sm" data-add="${r.id}">Noter</button>`; }
+      else if (s.verdict === "value") { verdict = `<span class="pill neutral" title="Seul le modèle voit de la value : non validé par le backtest">Ne pas parier · avis modèle seul</span>`; }
+      else if (s.verdict === "suspect") verdict = '<span class="pill warn" title="Un écart de plus de 15 % avec le prix juste est presque toujours une erreur de saisie ou une cote d&#39;un autre marché">⚠ Vérifiez la cote saisie</span>';
+      else if (s.verdict === "haute") verdict = '<span class="pill warn">Cote trop haute</span>';
+      else if (s.verdict === "faible") verdict = '<span class="pill neutral">Marge insuffisante</span>';
+      else verdict = '<span class="pill bad">✕ Pas de value</span>';
+    }
+    html += `<tr><td>${esc(r.label)}</td><td class="n">${pct(r.pm)}</td><td class="n">${r.pj ? pct(r.pj) : '<span class="muted">–</span>'}</td>
+      <td class="n">${dec(1 / pref)}</td><td class="n"><input data-o="${r.id}" value="${esc(od[r.id] || "")}" inputmode="decimal" placeholder="—" aria-label="Votre cote ${esc(r.label)}">${src[r.id] ? `<div class="muted" style="font-size:11px">${esc(src[r.id])}</div>` : ""}</td>
+      <td class="n">${val}</td><td>${verdict}</td><td class="n">${mise}</td></tr>`;
+  }
+  $("#mktTable").innerHTML = html + "</tbody>";
+  $$("#mktTable input").forEach(inp => inp.addEventListener("change", e => { od[e.target.dataset.o] = e.target.value; delete src[e.target.dataset.o]; renderMarkets(); const n = $(`#mktTable input[data-o="${e.target.dataset.o}"]`); n && n.focus(); }));
+  $$("#mktTable .gtoggle").forEach(b => b.addEventListener("click", () => { const g = b.dataset.g; openGroups.has(g) ? openGroups.delete(g) : openGroups.add(g); store.set("openGroups", [...openGroups]); renderMarkets(); }));
+  $$("#mktTable [data-add]").forEach(b => b.addEventListener("click", () => {
+    const r = rows.find(x => x.id === b.dataset.add); const o = parseNum(od[r.id]); const pref = r.pj || r.pm;
+    const s = stakeFor(pref, o, r.pj ? C.edge_min_marche : C.edge_min);
+    addBet({ date: fxm ? fxm.date : new Date().toISOString().slice(0, 10), match: `${cur.h} - ${cur.a}`, market: r.label, odds: o, stake: Math.round(s.stake / 100) * 100 || 100, prob: pref, result: "attente",
+      league: cur.l, home: cur.h, away: cur.a, mid: r.id, book: src[r.id] || null });
+    toast("Pari ajouté au journal");
+  }));
+}
+
+/* ---------- Équipes ---------- */
+let eLeague = store.get("eLeague", LCODES[0]); if (!L[eLeague]) eLeague = LCODES[0];
+$("#eLeague").innerHTML = LCODES.map(c => `<option value="${c}">${esc(L[c].nom)} · ${esc(L[c].pays)}</option>`).join("");
+$("#eLeague").addEventListener("change", e => { eLeague = e.target.value; store.set("eLeague", eLeague); renderTeams(); });
+function renderTeams() {
+  const lg = L[eLeague]; $("#eLeague").value = eLeague;
+  $("#eTitle").textContent = lg.nom + " · saison " + fmtSeason(lg.saison);
+  const base = Math.exp(lg.mu);
+  const att = t => base * Math.exp((lg.teams[t] || lg.prior)[0]);
+  const def = t => base * Math.exp((lg.teams[t] || lg.prior)[1]);
+  const names = lg.classement.map(r => r.equipe);
+  const aMax = Math.max(...names.map(att)), dMax = Math.max(...names.map(def));
+  const bar = (v, mx, col) => `<div class="ratebar"><span style="left:0;width:${(100 * v / mx).toFixed(0)}%;background:var(${col})"></span></div>`;
+  $("#eTable").innerHTML = `<thead><tr><th class="n">#</th><th>Équipe</th><th class="n">J</th><th class="n">Pts</th><th class="n">Diff</th><th>Forme</th><th>Attaque</th><th>Buts encaissés</th></tr></thead><tbody>` +
+    lg.classement.map((r, i) => `<tr><td class="n">${i + 1}</td><td><button class="tlink" data-t="${esc(r.equipe)}" title="Analyser un match de ${esc(r.equipe)}">${esc(r.equipe)}</button></td><td class="n">${r.j}</td><td class="n"><b>${r.pts}</b></td><td class="n">${r.bp - r.bc > 0 ? "+" : ""}${r.bp - r.bc}</td>
+      <td><span class="form">${[...r.forme].map(c => `<i class="${c}">${c}</i>`).join("")}</span></td>
+      <td title="${dec(att(r.equipe))} buts attendus">${bar(att(r.equipe), aMax, "--s1")}</td><td title="${dec(def(r.equipe))} buts concédés attendus">${bar(def(r.equipe), dMax, "--s2")}</td></tr>`).join("") + "</tbody>";
+  $$("#eTable [data-t]").forEach(b => b.onclick = () => { const t = b.dataset.t; const other = names.find(n => n !== t); openMatch(eLeague, t, other); });
+  // nuage attaque / défense
+  const pts = names.map(t => ({ t, x: att(t), y: def(t) }));
+  const W = 520, H = 400, m = { l: 46, r: 16, t: 14, b: 40 };
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const x0 = Math.min(...xs) * 0.92, x1 = Math.max(...xs) * 1.05, y0 = Math.min(...ys) * 0.92, y1 = Math.max(...ys) * 1.05;
+  const sx = v => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const sy = v => m.t + (v - y0) / (y1 - y0) * (H - m.t - m.b); // défense solide (peu de buts) en haut
+  const ticks = (a, b) => { const out = []; const st = 0.25; for (let v = Math.ceil(a / st) * st; v <= b; v += st) out.push(+v.toFixed(2)); return out; };
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Attaque et défense des équipes">`;
+  ticks(x0, x1).forEach(v => svg += `<line x1="${sx(v)}" x2="${sx(v)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--line)"/><text x="${sx(v)}" y="${H - m.b + 16}" font-size="11" fill="var(--muted)" text-anchor="middle">${dec(v)}</text>`);
+  ticks(y0, y1).forEach(v => svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${sy(v) + 4}" font-size="11" fill="var(--muted)" text-anchor="end">${dec(v)}</text>`);
+  svg += `<text x="${(W + m.l) / 2}" y="${H - 6}" font-size="12" fill="var(--fg-2)" text-anchor="middle">Buts marqués attendus par match →</text>`;
+  svg += `<text transform="translate(12 ${(H - m.b + m.t) / 2}) rotate(-90)" font-size="12" fill="var(--fg-2)" text-anchor="middle">← Buts encaissés attendus (moins = mieux)</text>`;
+  const boxes = pts.map(p => [sx(p.x) - 6, sy(p.y) - 6, sx(p.x) + 6, sy(p.y) + 6]);
+  const hit = b => boxes.some(q => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+  pts.forEach(p => { const cx = sx(p.x), cy = sy(p.y);
+    svg += `<circle cx="${cx}" cy="${cy}" r="5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>${esc(p.t)} : attaque ${dec(p.x)}, encaissés ${dec(p.y)}</title></circle>`; });
+  pts.slice().sort((a, b) => a.y - b.y).forEach(p => {
+    const cx = sx(p.x), cy = sy(p.y), w = p.t.length * 6.2, hgt = 12;
+    const cands = [[cx + 8, cy + 4, "start"], [cx - 8, cy + 4, "end"], [cx, cy - 9, "middle"], [cx, cy + 17, "middle"], [cx + 8, cy - 8, "start"], [cx - 8, cy + 16, "end"], [cx + 8, cy + 16, "start"], [cx - 8, cy - 8, "end"]];
+    for (const [x, y, anc] of cands) {
+      const x0b = anc === "start" ? x : anc === "end" ? x - w : x - w / 2;
+      const b = [x0b, y - 10, x0b + w, y - 10 + hgt];
+      if (b[0] < m.l || b[2] > W - 2 || b[1] < 0 || b[3] > H - m.b) continue;
+      if (hit(b)) continue;
+      boxes.push(b);
+      svg += `<text x="${x}" y="${y}" font-size="11" fill="var(--fg-2)" text-anchor="${anc}">${esc(p.t)}</text>`;
+      return;
+    }
+  });
+  $("#eScatter").innerHTML = svg + "</svg>";
+}
+const fmtSeason = s => /^\d{4}$/.test(s) && s.length === 4 && +s.slice(0, 2) + 1 === +s.slice(2) % 100 ? "20" + s.slice(0, 2) + "-" + s.slice(2) : s;
+
+/* ---------- Fiabilité ---------- */
+const charts = {};
+function chartDefaults() {
+  if (!window.Chart) return false;
+  Chart.defaults.font.family = css("--f-body"); Chart.defaults.color = css("--fg-2"); Chart.defaults.borderColor = css("--line");
+  return true;
+}
+function fmtD(s) { return new Date(s).toLocaleDateString("fr-FR"); }
+function roiCell(st, strong) {
+  if (!st || !st.n) return '<span class="muted">aucun pari</span>';
+  const col = st.n < 30 ? "muted" : st.roi >= 0 ? "good" : "bad";
+  return `<span style="color:var(--${col});${strong ? "font-weight:600" : ""}">${st.roi >= 0 ? "+" : ""}${pct(st.roi)}</span>`;
+}
+function renderFiab() {
+  const SS0 = DATA.strategie || {}, g = BT._global;
+  const SC = SS0.periode ? { prudent: SS0 } : SS0;
+  const keys = ["prudent", "haut"].filter(k => SC[k] && SC[k].periode);
+  let scen = store.get("scen", null);
+  if (!keys.includes(scen)) scen = keys.find(k => (SC[k].n || 0) >= 30) || keys[0];
+  const S = SC[scen] || {};
+  const SCEN_LAB = { prudent: "Hypothèse prudente", haut: "Hypothèse haute" };
+  ["s", "c", "p"].forEach(k => { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
+  let h = "";
+  /* 0. Comparaison des deux hypothèses */
+  if (keys.length > 1) {
+    h += `<div class="panel" style="padding:0"><div style="padding:16px 18px 6px"><h3>Deux hypothèses de cotes</h3><p class="muted" style="margin:4px 0 0;font-size:12px">L'historique ne contient pas les cotes Betclic et 1xBet. La vérité se situe entre une hypothèse prudente (Bet365, très proche de Pinnacle) et une hypothèse haute (la meilleure cote parmi une quinzaine de bookmakers). Cliquez sur « Voir le détail » pour afficher une hypothèse.</p></div>
+      <div class="scroll-x"><table><thead><tr><th>Hypothèse</th><th>Cotes utilisées</th><th class="n">Paris</th><th class="n">Par semaine</th><th class="n">ROI</th><th class="n">Fourchette</th><th class="n">CLV</th><th></th></tr></thead><tbody>` +
+      keys.map(k => { const x = SC[k], ic2 = x.ic || [null, null];
+        return `<tr><td><b>${SCEN_LAB[k]}</b></td><td>${esc(x.bookmaker || "")}</td><td class="n">${x.n || 0}</td><td class="n">${dec(x.par_semaine, 1)}</td><td class="n">${roiCell(x, true)}</td><td class="n">${ic2[0] != null ? `${pct(ic2[0], 0)} à ${pct(ic2[1], 0)}` : "–"}</td><td class="n">${x.clv != null ? pct(x.clv) : "–"}</td>
+          <td><button class="chip" data-scen="${k}" aria-pressed="${k === scen}">${k === scen ? "Détail affiché" : "Voir le détail"}</button></td></tr>`; }).join("") + "</tbody></table></div></div>";
+  }
+  /* 1. Verdict de la stratégie */
+  if (!S.periode) {
+    h += `<div class="panel empty"><h3>Backtest de la stratégie indisponible</h3>Relancez <code>LANCER.bat</code> pour le calculer.</div>`;
+  } else {
+    const n = S.n || 0, ic = S.ic || [null, null];
+    let cls = "", titre, texte;
+    if (n < 30) { titre = "Pas assez de paris pour conclure"; texte = `Avec vos réglages, la stratégie n'aurait trouvé que ${n} pari${n > 1 ? "s" : ""} en deux saisons. Il en faut au moins 30 pour que le résultat veuille dire quelque chose. Regardez le tableau de sensibilité : un seuil un peu plus bas donne davantage d'occasions.`; }
+    else if (ic[0] > 0) { cls = "ok"; titre = "La stratégie a été rentable, et ce n'est probablement pas de la chance"; texte = `Sur ${n} paris, le ROI est de ${pct(S.roi)}, et même le bas de la fourchette reste positif (${pct(ic[0])}).`; }
+    else if (S.roi > 0) { titre = "Rentable sur la période, mais pas encore prouvé"; texte = `Sur ${n} paris, le ROI est de ${pct(S.roi)}, mais la fourchette (${pct(ic[0])} à ${pct(ic[1])}) inclut zéro : ce gain peut encore venir de la chance.`; }
+    else { titre = "Pas rentable sur la période testée"; texte = `Sur ${n} paris, le ROI est de ${pct(S.roi)} (fourchette ${pct(ic[0])} à ${pct(ic[1])}). Avec ces réglages, la stratégie aurait perdu de l'argent.`; }
+    const clvTxt = S.clv == null ? "" : S.clv > 0 ? ` La CLV moyenne est positive (${pct(S.clv)}) : les cotes prises battaient en moyenne la cote de clôture Pinnacle, c'est le meilleur signe d'un vrai avantage.` : ` La CLV moyenne est négative (${pct(S.clv)}) : les cotes prises étaient en moyenne moins bonnes que la clôture Pinnacle, mauvais signe pour la suite.`;
+    h += `<div class="panel verdict ${cls}"><div class="label" style="margin-bottom:6px">${keys.length > 1 ? SCEN_LAB[scen] + " · " : ""}Votre stratégie : value ≥ ${pct(S.params.edge, 0)} face à ${esc(S.source_ref || "Pinnacle")} et au moins ${pct(S.params.pmin, 0)} de chances</div>
+      <h2>${titre}</h2><p>${texte}${clvTxt}</p>
+      <p class="fg2" style="margin:0">Période testée : ${fmtD(S.periode[0])} → ${fmtD(S.periode[1])}, ${S.matchs.toLocaleString("fr-FR")} matchs. ${scen === "haut" ? "Cotes utilisées : la meilleure parmi une quinzaine de bookmakers. Hypothèse optimiste : vous n'aurez pas toujours accès à cette cote avec Betclic et 1xBet." : "Cotes utilisées : Bet365, substitut prudent de Betclic et 1xBet, absentes de l'historique."}</p></div>`;
+    h += `<div class="tiles">
+      ${tile("Paris", n.toLocaleString("fr-FR"), `environ ${dec(S.par_semaine, 1)} par semaine`)}
+      ${n ? tile("Réussite", pct(S.reussite, 0), `cote moyenne ${dec(S.cote_moy)}`) : ""}
+      ${n ? tile("ROI (mise fixe)", (S.roi >= 0 ? "+" : "") + pct(S.roi), ic[0] != null ? `fourchette ${pct(ic[0], 0)} à ${pct(ic[1], 0)}` : "", n < 30 ? null : S.roi >= 0 ? "good" : "bad") : ""}
+      ${S.clv != null ? tile("CLV moyenne", (S.clv >= 0 ? "+" : "") + pct(S.clv), "positive = vous battez la clôture", S.clv >= 0 ? "good" : "bad") : ""}
+      ${S.kelly_final != null ? tile("Bankroll ¼ Kelly", (S.kelly_final >= 1 ? "+" : "") + pct(S.kelly_final - 1), `pire baisse en cours de route ${pct(S.drawdown, 0)}`, S.kelly_final >= 1 ? "good" : "bad") : ""}
+    </div>`;
+    /* 2. Courbe + par marché */
+    if (n) h += `<div class="two"><div class="panel"><h3>Profit cumulé</h3><p class="muted" style="margin:4px 0 8px;font-size:12px">En unités de mise : +10 = dix mises gagnées.</p><div class="chartbox"><canvas id="cStrat" aria-label="Profit cumulé de la stratégie"></canvas></div></div>
+      <div class="panel" style="padding:0"><div style="padding:16px 18px 6px"><h3>Par type de pari</h3></div><div class="scroll-x"><table><thead><tr><th>Pari</th><th class="n">Paris</th><th class="n">Réussite</th><th class="n">ROI</th><th class="n">CLV</th></tr></thead><tbody>` +
+      (S.par_marche || []).map(m => `<tr><td>${esc(m.pari)}</td><td class="n">${m.n}</td><td class="n">${pct(m.reussite, 0)}</td><td class="n">${roiCell(m)}</td><td class="n">${m.clv != null ? pct(m.clv) : "–"}</td></tr>`).join("") + `</tbody></table></div></div></div>`;
+    /* 3. Sensibilité */
+    const E = [...new Set((S.grille || []).map(x => x.edge))], P = [...new Set((S.grille || []).map(x => x.pmin))];
+    const cell = (p, e) => (S.grille || []).find(x => x.pmin === p && x.edge === e) || { n: 0 };
+    h += `<div class="panel" style="padding:0"><div style="padding:16px 18px 6px"><h3>Sensibilité des réglages</h3><p class="muted" style="margin:4px 0 0;font-size:12px">ROI selon le seuil de chances (lignes) et la value minimale (colonnes), avec le nombre de paris. La case encadrée est votre réglage actuel. En gris : moins de 30 paris, résultat peu fiable.</p></div>
+      <div class="scroll-x"><table class="sens"><thead><tr><th>Chances min.</th>${E.map(e => `<th class="n">Value ≥ ${pct(e, 0)}</th>`).join("")}</tr></thead><tbody>` +
+      P.map(p => `<tr><td><b>${pct(p, 0)}</b></td>${E.map(e => { const c = cell(p, e), cur = Math.abs(p - S.params.pmin) < 1e-9 && Math.abs(e - S.params.edge) < 1e-9;
+        const bg = !c.n || c.n < 30 ? "" : c.roi >= 0 ? "background:var(--good-soft)" : "background:var(--bad-soft)";
+        return `<td class="n" style="${bg};${cur ? "outline:2px solid var(--accent);outline-offset:-2px" : ""}">${roiCell(c, cur)}<div class="muted" style="font-size:11px">${c.n || 0} paris${c.clv != null ? ` · CLV ${pct(c.clv, 1)}` : ""}</div></td>`; }).join("")}</tr>`).join("") +
+      `</tbody></table></div></div>`;
+    /* 4. Par championnat */
+    const PL = S.par_ligue || {};
+    h += `<div class="panel" style="padding:0"><div style="padding:16px 18px 6px"><h3>Par championnat</h3></div><div class="scroll-x"><table><thead><tr><th>Championnat</th><th class="n">Paris</th><th class="n">Réussite</th><th class="n">ROI</th><th class="n">CLV</th><th>Lecture</th></tr></thead><tbody>` +
+      LCODES.map(c => { const s = PL[c]; const n2 = s ? s.n : 0;
+        const pill = !n2 ? '<span class="pill neutral">Aucun pari</span>' : n2 < 30 ? '<span class="pill neutral">Trop peu de paris</span>' : s.roi >= 0 ? '<span class="pill good">Positif</span>' : '<span class="pill bad">Négatif</span>';
+        return `<tr><td>${esc(L[c].nom)} <span class="muted">${esc(L[c].pays)}</span></td><td class="n">${n2}</td><td class="n">${n2 ? pct(s.reussite, 0) : "–"}</td><td class="n">${roiCell(s)}</td><td class="n">${s && s.clv != null ? pct(s.clv) : "–"}</td><td>${pill}</td></tr>`; }).join("") + "</tbody></table></div></div>";
+  }
+  /* 5. Vos résultats réels */
+  const settled = (typeof bets !== "undefined" ? bets : []).filter(b => b.result === "gagne" || b.result === "perdu");
+  const staked = settled.reduce((a, b) => a + b.stake, 0), profit = settled.reduce((a, b) => a + profitOf(b), 0);
+  const exp = settled.filter(b => b.prob).reduce((a, b) => a + b.stake * (b.prob * b.odds - 1), 0);
+  const cls2 = (typeof bets !== "undefined" ? bets : []).map(clvOf).filter(v => v != null);
+  const clvM = cls2.length ? cls2.reduce((a, b) => a + b, 0) / cls2.length : null;
+  h += `<div class="panel"><h3 style="margin-bottom:8px">Vos résultats réels</h3>`;
+  if (!settled.length) h += `<p class="fg2" style="margin:0">Aucun pari réglé dans le journal pour l'instant. Notez vos paris avec le bouton « Noter », puis indiquez le résultat après le match : cette section comparera vos chiffres au backtest.</p></div>`;
+  else {
+    const verdict = settled.length < 50 ? "Encore trop tôt pour juger : attendez 50 à 100 paris." : clvM != null && clvM > 0 ? "Votre CLV est positive : vous prenez de bons prix, la méthode fonctionne." : "Votre CLV n'est pas positive : on revoit les réglages avant de continuer.";
+    h += `<div class="tiles" style="margin-bottom:10px">
+      ${tile("Paris réglés", settled.length, "objectif : 50 à 100")}
+      ${tile("ROI réel", staked ? (profit >= 0 ? "+" : "") + pct(profit / staked) : "–", S.roi != null ? `backtest : ${pct(S.roi)}` : "", profit >= 0 ? "good" : "bad")}
+      ${tile("CLV réelle", clvM == null ? "–" : (clvM >= 0 ? "+" : "") + pct(clvM), cls2.length ? `sur ${cls2.length} paris` : "après la relance qui suit les matchs", clvM == null ? null : clvM >= 0 ? "good" : "bad")}
+      ${tile("Profit réel / attendu", fcfa(profit), `attendu ${exp ? fcfa(exp) : "–"} · l'écart, c'est la chance`)}
+    </div><p class="fg2" style="margin:0"><b>${verdict}</b></p></div>`;
+  }
+  /* 6. Le modèle, replié */
+  if (g) {
+    const beats = g.logloss_marche != null && g.logloss_modele < g.logloss_marche;
+    h += `<details class="panel"><summary style="cursor:pointer"><b>Le modèle de prédiction (pour information)</b> <span class="muted">· il ne décide plus des paris</span></summary>
+      <p style="margin-top:12px">Test sur ${g.n.toLocaleString("fr-FR")} matchs. ${beats ? "Le modèle prédit aussi bien que le marché." : `Les cotes du marché prédisent mieux que le modèle (erreur ${dec(g.logloss_marche, 3)} contre ${dec(g.logloss_modele, 3)}, plus bas = mieux).`} Précision 1N2 : modèle ${pct(g.precision_1x2)}${g.precision_marche != null ? `, marché ${pct(g.precision_marche)}` : ""}.</p>
+      <div class="chartbox" style="height:240px"><canvas id="cCalib" aria-label="Calibration du modèle"></canvas></div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Calibration : quand le modèle annonce X %, fréquence réelle observée (pointillés = calibration parfaite).</p>` +
+      (Object.keys(g.stats || {}).length ? `<div class="scroll-x" style="margin-top:12px"><table><thead><tr><th>Statistique</th><th class="n">Écart modèle</th><th class="n">Écart naïf</th><th class="n">Gain</th></tr></thead><tbody>` +
+        Object.values(g.stats).map(s => `<tr><td>${esc(s.label)}</td><td class="n">${dec(s.mae, 2)}</td><td class="n">${dec(s.mae_naif, 2)}</td><td class="n">${pct(1 - s.mae / s.mae_naif)}</td></tr>`).join("") + "</tbody></table></div>" : "") + "</details>";
+  }
+  $("#fiab").innerHTML = h;
+  $$("#fiab [data-scen]").forEach(b => b.onclick = () => { store.set("scen", b.dataset.scen); renderFiab(); });
+  if (chartDefaults() === false) return;
+  if (S.courbe && $("#cStrat")) charts.s = new Chart($("#cStrat"), { type: "line", data: { labels: S.courbe.map(p => p.d), datasets: [{ data: S.courbe.map(p => p.plat), borderColor: css("--accent"), backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.1 }] },
+    options: { maintainAspectRatio: false, interaction: { mode: "nearest", axis: "x", intersect: false },
+      scales: { x: { ticks: { maxTicksLimit: 6, callback(v) { return new Date(this.getLabelForValue(v)).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" }); } }, grid: { display: false } },
+        y: { title: { display: true, text: "unités" }, grid: { color: css("--line") } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => fmtD(i[0].label), label: c => `${c.parsed.y >= 0 ? "+" : ""}${dec(c.parsed.y, 1)} u` } } } } });
+  const det = $("#fiab details");
+  if (det && g) det.addEventListener("toggle", () => {
+    if (!det.open || charts.c) return;
+    const cal = g.calib_1x2 || [];
+    charts.c = new Chart($("#cCalib"), { type: "scatter", data: { datasets: [
+      { data: [{ x: 0, y: 0 }, { x: 0.8, y: 0.8 }], showLine: true, borderColor: css("--muted"), borderDash: [4, 4], borderWidth: 1.5, pointRadius: 0 },
+      { data: cal.map(c => ({ x: c.pred, y: c.obs, n: c.n })), showLine: true, borderColor: css("--s1"), backgroundColor: css("--s1"), borderWidth: 2, pointRadius: 5, pointBorderColor: css("--surface"), pointBorderWidth: 2 }] },
+      options: { maintainAspectRatio: false, scales: { x: { min: 0, max: 0.8, ticks: { callback: v => Math.round(v * 100) + " %" }, grid: { color: css("--line") } }, y: { min: 0, max: 0.8, ticks: { callback: v => Math.round(v * 100) + " %" }, grid: { color: css("--line") } } },
+        plugins: { legend: { display: false }, tooltip: { filter: i => i.datasetIndex === 1, callbacks: { label: c => `Prévu ${pct(c.raw.x, 0)} → réel ${pct(c.raw.y, 0)} (${c.raw.n} cas)` } } } } });
+  });
+}
+function tile(label, v, s, tone) { return `<div class="tile"><div class="label">${label}</div><div class="v" ${tone ? `style="color:var(--${tone})"` : ""}>${v}</div><div class="s">${s}</div></div>`; }
+
+/* ---------- Journal ---------- */
+let bets = store.get("bets", []);
+const saveBets = () => store.set("bets", bets);
+function addBet(b) { bets.push({ id: Date.now() + Math.random(), ...b }); saveBets(); if (!$("#tab-journal").hidden) renderJournal(); }
+$("#jDate").value = new Date().toISOString().slice(0, 10);
+$("#jForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const o = parseNum($("#jOdds").value), s = parseNum($("#jStake").value), p = parseNum($("#jProb").value);
+  if (!o || o <= 1 || !s) { toast("Vérifiez la cote (> 1) et la mise"); return; }
+  addBet({ date: $("#jDate").value, match: $("#jMatch").value.trim(), market: $("#jMarket").value.trim(), odds: o, stake: s, prob: p ? (p > 1 ? p / 100 : p) : null, result: "attente" });
+  ["#jMatch", "#jMarket", "#jOdds", "#jStake", "#jProb"].forEach(s => $(s).value = ""); toast("Pari ajouté");
+});
+function clvOf(b) {
+  if (!b.league || !MK[b.mid]) return null;
+  const c = (DATA.clotures || {})[`${b.league}|${b.home}|${b.away}`];
+  const close = c && c[MK[b.mid]];
+  return close ? b.odds / close - 1 : null;
+}
+const profitOf = b => b.result === "gagne" ? b.stake * (b.odds - 1) : b.result === "perdu" ? -b.stake : 0;
+function renderJournal() {
+  const sorted = bets.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  const settled = sorted.filter(b => b.result === "gagne" || b.result === "perdu");
+  const staked = settled.reduce((s, b) => s + b.stake, 0), profit = settled.reduce((s, b) => s + profitOf(b), 0);
+  const start = store.get("bankroll", C.bankroll);
+  const exp = settled.filter(b => b.prob).reduce((s, b) => s + b.stake * (b.prob * b.odds - 1), 0);
+  $("#jTiles").innerHTML = tile("Bankroll actuelle", fcfa(start + profit), `départ ${fcfa(start)}`) +
+    tile("Profit", (profit >= 0 ? "+" : "") + fcfa(profit), `${settled.length} paris réglés · ${sorted.length - settled.length} en attente`, profit < 0 ? "bad" : profit > 0 ? "good" : null) +
+    tile("ROI", staked ? pct(profit / staked) : "–", `sur ${fcfa(staked)} misés`) +
+    tile("Réussite", settled.length ? pct(settled.filter(b => b.result === "gagne").length / settled.length, 0) : "–", "paris gagnés") +
+    tile("Profit attendu", exp ? (exp >= 0 ? "+" : "") + fcfa(exp) : "–", "selon vos probas : l'écart avec le réel, c'est la chance") +
+    (() => { const cl = sorted.map(clvOf).filter(v => v != null); const m = cl.length ? cl.reduce((a, b) => a + b, 0) / cl.length : null;
+      return tile("CLV moyenne", m == null ? "–" : (m >= 0 ? "+" : "") + pct(m), cl.length ? `sur ${cl.length} paris · positive = vous battez la cote de clôture` : "se calcule après les matchs, à la relance suivante", m == null ? null : m >= 0 ? "good" : "bad"); })();
+  if (!sorted.length) {
+    $("#jTable").innerHTML = `<tbody><tr><td class="empty" colspan="9"><h3>Journal vide</h3>Ajoutez un pari ci-dessus, ou cliquez sur « Noter » à côté d'une mise conseillée dans l'onglet Analyser un match.</td></tr></tbody>`;
+  } else {
+    $("#jTable").innerHTML = `<thead><tr><th>Date</th><th>Match</th><th>Marché</th><th class="n">Cote</th><th class="n">Mise</th><th>Résultat</th><th class="n">Gain</th><th class="n" title="Votre cote comparée à la cote de clôture Pinnacle">CLV</th><th></th></tr></thead><tbody>` +
+      sorted.slice().reverse().map(b => `<tr><td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td><td>${esc(b.match)}</td><td>${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}</td><td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
+        <td><select class="sel" data-r="${b.id}" aria-label="Résultat">${[["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]].map(([v, l]) => `<option value="${v}" ${b.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+        <td class="n" style="color:var(--${profitOf(b) > 0 ? "good" : profitOf(b) < 0 ? "bad" : "muted"})">${b.result === "attente" ? "–" : (profitOf(b) >= 0 ? "+" : "") + fcfa(profitOf(b))}</td>
+        <td class="n">${(v => v == null ? '<span class="muted">–</span>' : `<span style="color:var(--${v >= 0 ? "good" : "bad"})">${v >= 0 ? "+" : ""}${pct(v)}</span>`)(clvOf(b))}</td>
+        <td><button class="btn ghost sm" data-del="${b.id}" aria-label="Supprimer">Supprimer</button></td></tr>`).join("") + "</tbody>";
+    $$("#jTable [data-r]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.r).result = s.value; saveBets(); renderJournal(); });
+    $$("#jTable [data-del]").forEach(btn => btn.onclick = () => {
+      if (btn.dataset.confirm) { bets = bets.filter(b => String(b.id) !== btn.dataset.del); saveBets(); renderJournal(); }
+      else { btn.dataset.confirm = 1; btn.textContent = "Confirmer"; btn.classList.remove("ghost"); }
+    });
+  }
+  if (chartDefaults() === false) return;
+  let bank = start; const pts = [{ x: "Départ", y: start }];
+  settled.forEach((b, i) => { bank += profitOf(b); pts.push({ x: `${i + 1}`, y: bank }); });
+  charts.j && charts.j.destroy();
+  charts.j = new Chart($("#jChart"), { type: "line", data: { labels: pts.map(p => p.x), datasets: [{ data: pts.map(p => p.y), borderColor: css("--accent"), backgroundColor: "transparent", borderWidth: 2, pointRadius: pts.length < 40 ? 3 : 0, tension: 0 }] },
+    options: { maintainAspectRatio: false, scales: { x: { title: { display: true, text: "paris réglés" }, grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: css("--line") }, ticks: { maxTicksLimit: 6, callback: v => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }).format(v) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fcfa(c.parsed.y) } } } } });
+}
+$("#jCsv").addEventListener("click", () => {
+  const csv = "date;match;marche;bookmaker;cote;mise;proba;resultat;gain;clv\n" + bets.map(b => [b.date, b.match, b.market, b.book || "", b.odds, b.stake, b.prob ?? "", b.result, profitOf(b), clvOf(b) ?? ""].join(";")).join("\n");
+  navigator.clipboard.writeText(csv).then(() => toast("Journal copié : collez-le dans Excel"), () => toast("Copie refusée par le navigateur"));
+});
+
+/* ---------- Démarrage ---------- */
+renderBooks(); fillSelectors(); renderAnalyse(); renderFixtures();
+const hash = location.hash.slice(1);
+showTab(TABS.includes(hash) ? hash : store.get("tab", (DATA.matchs || []).length ? "matchs" : "analyse"));
+})();
+</script>
