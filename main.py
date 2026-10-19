@@ -233,6 +233,8 @@ def build(offline: bool = False, force_bt: bool = False, open_browser: bool = Tr
         "matchs": fixtures,
         "cotes_live": cotes_live,
         "clotures": closing_odds(df, ref),
+        "alias": oddsapi.ALIASES,               # pour reconnaître le championnat d'un pari saisi à la main
+        "generiques": sorted(oddsapi._GENERIC),
         "backtest": bt,
         "strategie": strategie,
         "demo": demo,

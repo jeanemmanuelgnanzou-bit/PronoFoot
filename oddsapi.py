@@ -70,6 +70,38 @@ ALIASES = {
     "erzurum bb": ["Erzurumspor", "Erzurum"], "erzurumspor": ["Erzurumspor", "Erzurum"],
 }
 
+# Noms français et surnoms courants (saisie manuelle dans le journal)
+ALIASES.update({
+    "man utd": ["Man United"], "manchester utd": ["Man United"], "man u": ["Man United"], "spurs": ["Tottenham"],
+    "forest": ["Nott'm Forest"], "nottingham": ["Nott'm Forest"], "villa": ["Aston Villa"], "palace": ["Crystal Palace"],
+    "barcelone": ["Barcelona"], "barca": ["Barcelona"], "real": ["Real Madrid"], "seville": ["Sevilla"], "atletico": ["Ath Madrid"],
+    "atletico de madrid": ["Ath Madrid"], "bilbao": ["Ath Bilbao"], "valence": ["Valencia"], "majorque": ["Mallorca"],
+    "gerone": ["Girona"], "betis seville": ["Betis"], "la corogne": ["La Coruna"], "villareal": ["Villarreal"],
+    "naples": ["Napoli"], "rome": ["Roma"], "as rome": ["Roma"], "juve": ["Juventus"], "inter milan": ["Inter"],
+    "milan ac": ["Milan"], "lazio rome": ["Lazio"], "turin": ["Torino"], "genes": ["Genoa"], "venise": ["Venezia"], "verone": ["Verona"],
+    "fribourg": ["Freiburg"], "cologne": ["FC Koln"], "koeln": ["FC Koln"], "gladbach": ["M'gladbach"], "monchengladbach": ["M'gladbach"],
+    "moenchengladbach": ["M'gladbach"], "francfort": ["Ein Frankfurt"], "frankfurt": ["Ein Frankfurt"], "leipzig": ["RB Leipzig"],
+    "bayern": ["Bayern Munich"], "bayern munchen": ["Bayern Munich"], "breme": ["Werder Bremen"], "werder breme": ["Werder Bremen"],
+    "werder": ["Werder Bremen"], "augsbourg": ["Augsburg"], "hambourg": ["Hamburg"], "schalke": ["Schalke 04"], "sankt pauli": ["St Pauli"],
+    "psg": ["Paris SG"], "paris saint germain": ["Paris SG"], "paris sg": ["Paris SG"], "om": ["Marseille"], "ol": ["Lyon"],
+    "asse": ["St Etienne"], "saint etienne": ["St Etienne"], "rcl": ["Lens"], "rc lens": ["Lens"], "stade rennais": ["Rennes"],
+    "rcsa": ["Strasbourg"], "havre": ["Le Havre"], "estac": ["Troyes"],
+    "sporting": ["Sp Lisbon"], "sporting portugal": ["Sp Lisbon"], "fc porto": ["Porto"], "sc braga": ["Sp Braga"], "guimaraes": ["Guimaraes"],
+    "psv": ["PSV Eindhoven"], "az": ["AZ Alkmaar"], "alkmaar": ["AZ Alkmaar"], "sittard": ["For Sittard"], "nimegue": ["Nijmegen"],
+    "go ahead": ["Go Ahead Eagles"], "sparta": ["Sparta Rotterdam"], "breda": ["NAC Breda"],
+    "bruges": ["Club Brugge"], "club bruges": ["Club Brugge"], "cercle bruges": ["Cercle Brugge"], "anvers": ["Antwerp"],
+    "malines": ["Mechelen"], "gand": ["Gent"], "la gantoise": ["Gent"], "courtrai": ["Kortrijk"], "louvain": ["Oud-Heverlee Leuven"],
+    "saint trond": ["St Truiden"], "union saint gilloise": ["St. Gilloise"], "usg": ["St. Gilloise"], "standard de liege": ["Standard"],
+    "lommel": ["Lommel SK"], "basaksehir": ["Buyuksehyr"],
+    "hearts": ["Hearts"], "hibs": ["Hibernian"], "dundee utd": ["Dundee United"],
+    "bodo": ["Bodo/Glimt"], "bodo glimt": ["Bodo/Glimt"], "glimt": ["Bodo/Glimt"], "sarpsborg": ["Sarpsborg 08"], "tromso": ["Tromso"],
+    "salzbourg": ["Salzburg"], "rapid vienne": ["SK Rapid"], "austria vienne": ["Austria Vienna"], "klagenfurt": ["A. Klagenfurt"],
+    "linz": ["LASK"], "wolfsberg": ["Wolfsberger AC"], "lustenau": ["A. Lustenau"],
+    "copenhague": ["FC Copenhagen"], "fc copenhague": ["FC Copenhagen"], "midtjylland": ["Midtjylland"], "nordsjaelland": ["Nordsjaelland"],
+    "bale": ["Basel"], "fc bale": ["Basel"], "geneve": ["Servette"], "servette geneve": ["Servette"], "saint gall": ["St. Gallen"],
+    "lucerne": ["Luzern"], "fc lucerne": ["Luzern"], "sion": ["Sion"], "thoune": ["Thun"], "grasshopper": ["Grasshoppers"],
+})
+
 
 def norm(name: str) -> str:
     s = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode().lower()

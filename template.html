@@ -168,7 +168,11 @@ details.panel summary::marker { color: var(--accent); }
 .xfer textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: 12px ui-monospace, monospace; resize: vertical; }
 #jTable td.n { white-space: nowrap; }
 .jlegs { display: grid; gap: 8px; }
-.jleg { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(70px, .6fr) auto; gap: 8px; align-items: end; }
+.jleg { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(70px, .6fr) auto; gap: 8px; align-items: end; }
+.jleg select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; color: var(--fg); }
+table.cross td.xc { font-size: 14px; white-space: nowrap; } table.cross td.xc .muted { font-size: 11px; font-weight: 400; }
+table.cross tr.tot td { border-top: 2px solid var(--line); }
+
 .jleg label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .jleg input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
 .jleg .x { width: 32px; height: 34px; padding: 0; }
@@ -180,7 +184,7 @@ details.panel summary::marker { color: var(--accent); }
 .sel.xs { font-size: 11px; padding: 1px 4px; margin-left: 4px; color: var(--fg); text-decoration: none; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--line); color: var(--fg-2); white-space: nowrap; }
 .tag.o { background: var(--accent); color: #fff; }
-@media (max-width: 560px) { .jleg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .jleg label:first-child { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .jleg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .jleg label:first-child, .jleg label:nth-child(2) { grid-column: 1 / -1; } }
 .toast { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 50; }
 
 @media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
@@ -332,6 +336,7 @@ details.panel summary::marker { color: var(--accent); }
       <div class="tiles" id="jTiles"></div>
       <div class="panel" style="padding:0" id="jOrigWrap" hidden><div style="padding:16px 18px 6px"><h3>L'outil ou vos idées : qui gagne ?</h3></div><div class="scroll-x"><table id="jOrig"></table></div></div>
       <div class="panel" style="padding:0" id="jPicksWrap" hidden><div style="padding:16px 18px 6px"><h3>Sélection par sélection</h3><p class="muted" style="font-size:12px;margin:4px 0 0">Chaque sélection comptée seule, y compris celles de vos combinés : savoir si vous choisissez bien, même quand le ticket perd. « Réussite » au-dessus d'« Attendue » = vous trouvez mieux que ce que disent les cotes. 1 u = une mise.</p></div><div class="scroll-x"><table id="jPicks"></table></div></div>
+      <div class="panel" style="padding:0" id="jCrossWrap" hidden></div>
       <div class="panel jgroup" id="jGroup" hidden></div>
       <div class="panel">
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
@@ -917,6 +922,79 @@ function renderFiab() {
 }
 function tile(label, v, s, tone) { return `<div class="tile"><div class="label">${label}</div><div class="v" ${tone ? `style="color:var(--${tone})"` : ""}>${v}</div><div class="s">${s}</div></div>`; }
 
+/* ---------- Reconnaître le championnat et le type d'un pari saisi à la main ---------- */
+const GEN = new Set(DATA.generiques || []);
+const normT = s => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/&/g, " and ").replace(/['’]/g, "")
+  .replace(/[^a-z0-9]+/g, " ").split(" ").filter(t => t && !GEN.has(t)).join(" ");
+const TEAMS = Object.entries(L).flatMap(([c, lg]) => [...new Set([...Object.keys(lg.teams || {}), ...(lg.en_cours || [])])].map(t => ({ c, t, n: normT(t) })));
+function bigrams(s) { const a = []; for (let i = 0; i < s.length - 1; i++) a.push(s.slice(i, i + 2)); return a; }
+function sim(a, b) { const x = bigrams(a), y = bigrams(b); if (!x.length || !y.length) return a === b ? 1 : 0; let m = 0; const yy = y.slice();
+  for (const g of x) { const i = yy.indexOf(g); if (i >= 0) { m++; yy.splice(i, 1); } } return 2 * m / (x.length + y.length); }
+function teamCands(name) {   // candidats (championnat, équipe, score) pour un nom tapé librement
+  const n = normT(name); if (!n) return [];
+  const al = (DATA.alias || {})[n] || [];
+  const toks = n.split(" ");
+  return TEAMS.map(e => {
+    if (e.n === n) return { ...e, s: 1 };
+    if (al.includes(e.t)) return { ...e, s: 0.98 };
+    const tt = e.n.split(" ");
+    if (tt.every(w => toks.some(a => a.startsWith(w))) || toks.every(w => tt.some(a => a.startsWith(w)) && w.length >= 3))
+      return { ...e, s: 0.75 + 0.2 * Math.min(toks.length, tt.length) / Math.max(toks.length, tt.length) };
+    return { ...e, s: 0.9 * sim(n, e.n) };
+  }).filter(e => e.s >= 0.55).sort((a, b) => b.s - a.s);
+}
+function detectMatch(txt) {
+  const s = String(txt || "").trim(); if (!s) return null;
+  let parts = s.split(/\s+(?:-|–|—|vs\.?|v|contre|\/)\s+/i);
+  if (parts.length < 2) parts = s.split(/\s*[-–—]\s*/);
+  if (parts.length < 2) parts = [s];
+  const H = teamCands(parts[0]), A = parts[1] ? teamCands(parts.slice(1).join(" ")) : [];
+  let best = null;
+  for (const c of new Set([...H, ...A].map(e => e.c))) {
+    const h = H.find(e => e.c === c), a = A.find(e => e.c === c);
+    const sc = (h ? h.s : 0) + (a ? a.s : 0) + (h && a ? 0.5 : 0);
+    if (!best || sc > best.sc) best = { c, sc, home: h && h.t, away: a && a.t };
+  }
+  return best && best.sc >= 0.7 ? { league: best.c, home: best.home, away: best.away } : null;
+}
+const TYPES = ["1N2", "Double chance", "Buts", "BTTS", "Corners", "Cartons", "Fautes", "Tirs", "Tirs cadrés", "Autre"];
+function typeFromMid(m) {
+  if (!m) return null;
+  if (["1", "N", "2"].includes(m)) return "1N2";
+  if (["1N", "N2", "12"].includes(m)) return "Double chance";
+  if (/^[ou]\d/.test(m)) return "Buts";
+  if (m === "btts" || m === "nbtts") return "BTTS";
+  if (m.startsWith("corners")) return "Corners";
+  if (m.startsWith("cartons")) return "Cartons";
+  if (m.startsWith("fautes")) return "Fautes";
+  if (m.startsWith("tirs_cadres")) return "Tirs cadrés";
+  if (m.startsWith("tirs")) return "Tirs";
+  return null;
+}
+function marketInfo(text, home, away) {   // « 1 », « +2.5 », « Corners +9.5 », « Leverkusen »… → code et type
+  const t = String(text || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(",", ".").trim();
+  const num = (t.match(/(\d+(?:\.\d+)?)/) || [])[1];
+  const over = /(^|\s)\+|plus|over|^o\s?\d|>/.test(t), under = /(^|\s)-\s?\d|moins|under|^u\s?\d|</.test(t);
+  const ou = num ? (over ? "o" : under ? "u" : null) : null;
+  for (const [re, k] of [[/corner/, "corners"], [/carton|jaune|card|booking/, "cartons"], [/faute|foul/, "fautes"], [/cadr|on target/, "tirs_cadres"], [/tir|shot/, "tirs"]])
+    if (re.test(t)) return { type: typeFromMid(k), mid: ou ? `${k}${ou}${num}` : null };
+  if (/btts|deux.*marqu|both|^gg$|les 2 marquent/.test(t)) return { type: "BTTS", mid: /non|^no|ne marque|ng/.test(t) ? "nbtts" : "btts" };
+  const plain = t.replace(/\s+/g, "");
+  if (["1x", "1n", "x2", "n2", "12"].includes(plain) || /double chance|ou nul/.test(t)) return { type: "Double chance", mid: { "1x": "1N", "1n": "1N", "x2": "N2", "n2": "N2", "12": "12" }[plain] || null };
+  if (["1", "n", "x", "2"].includes(plain)) return { type: "1N2", mid: { 1: "1", n: "N", x: "N", 2: "2" }[plain] };
+  if (/nul|draw/.test(t)) return { type: "1N2", mid: "N" };
+  if (ou && (/but|goal/.test(t) || /^[+\-ou<>]?\s?\d/.test(t))) return { type: "Buts", mid: num === "2.5" ? (ou === "o" ? "o2.5" : "u2.5") : null };
+  const n = normT(text);
+  if (n && home && normT(home) === n) return { type: "1N2", mid: "1" };
+  if (n && away && normT(away) === n) return { type: "1N2", mid: "2" };
+  if (n) { const c = teamCands(text)[0]; if (c && c.s >= 0.75) return { type: "1N2", mid: home && c.t === home ? "1" : away && c.t === away ? "2" : null }; }
+  return { type: "Autre", mid: null };
+}
+const typeOf = b => typeFromMid(b.mid) || marketInfo(b.market, b.home, b.away).type;
+const leagueOf = b => b.league || (detectMatch(b.match) || {}).league || "";
+const leagueName = c => c && L[c] ? L[c].nom : "Championnat ?";
+const leagueOpts = sel => `<option value="">Championnat ?</option>` + Object.entries(L).map(([c, l]) => `<option value="${c}" ${sel === c ? "selected" : ""}>${esc(l.nom)} · ${esc(l.pays)}</option>`).join("");
+
 /* ---------- Journal ---------- */
 let bets = store.get("bets", []);
 const saveBets = () => store.set("bets", bets);
@@ -930,15 +1008,27 @@ $("#jDate").value = new Date().toISOString().slice(0, 10);
 let totTouched = false;
 function legRow() {
   const d = document.createElement("div"); d.className = "jleg";
-  d.innerHTML = `<label>Match<input data-f="match" placeholder="Arsenal - Chelsea" required></label>
-    <label>Marché<input data-f="market" placeholder="1, +2.5, BTTS…" required></label>
+  d.innerHTML = `<label>Match<input data-f="match" placeholder="Leverkusen - Fribourg" required></label>
+    <label>Championnat<select data-f="league">${leagueOpts("")}</select></label>
+    <label>Marché<input data-f="market" placeholder="1, +2.5, Corners +9.5…" required></label>
     <label>Cote<input data-f="odds" inputmode="decimal" placeholder="2,10" required></label>
     <button class="btn ghost sm x" type="button" aria-label="Retirer cette sélection">✕</button>`;
   d.querySelector(".x").onclick = () => { d.remove(); syncLegs(); };
   d.querySelector('[data-f="odds"]').addEventListener("input", syncLegs);
+  const lg = d.querySelector('[data-f="league"]');
+  lg.addEventListener("change", () => lg.dataset.touched = 1);
+  d.querySelector('[data-f="match"]').addEventListener("input", e => { if (lg.dataset.touched) return; const m = detectMatch(e.target.value); lg.value = m ? m.league : ""; });
   $("#jLegs").appendChild(d); syncLegs();
 }
-function legsData() { return $$("#jLegs .jleg").map(r => ({ match: r.querySelector('[data-f="match"]').value.trim(), market: r.querySelector('[data-f="market"]').value.trim(), odds: parseNum(r.querySelector('[data-f="odds"]').value) })); }
+function legsData() { return $$("#jLegs .jleg").map(r => {
+  const match = r.querySelector('[data-f="match"]').value.trim(), market = r.querySelector('[data-f="market"]').value.trim();
+  const league = r.querySelector('[data-f="league"]').value, m = detectMatch(match) || {};
+  const same = m.league === league, home = same ? m.home : undefined, away = same ? m.away : undefined;
+  const mi = marketInfo(market, home, away);
+  const o = { match, market, odds: parseNum(r.querySelector('[data-f="odds"]').value), league: league || undefined };
+  if (home && away) Object.assign(o, { home, away, mid: mi.mid || undefined });   // permet aussi la CLV des paris saisis à la main
+  return o;
+}); }
 function syncLegs() {
   const rows = $$("#jLegs .jleg"), combo = rows.length > 1;
   rows.forEach(r => r.querySelector(".x").hidden = !combo);
@@ -953,7 +1043,7 @@ $("#jForm").addEventListener("submit", e => {
   const legs = legsData(), s = parseNum($("#jStake").value), p = parseNum($("#jProb").value), src = $("#jSrc").value;
   if (legs.some(l => !l.odds || l.odds <= 1) || !s) { toast("Vérifiez les cotes (> 1) et la mise"); return; }
   const prob = p ? (p > 1 ? p / 100 : p) : null;
-  if (legs.length === 1) addBet({ date: $("#jDate").value, match: legs[0].match, market: legs[0].market, odds: legs[0].odds, stake: s, prob, result: "attente", src });
+  if (legs.length === 1) addBet({ ...legs[0], date: $("#jDate").value, stake: s, prob, result: "attente", src });
   else {
     const tot = parseNum($("#jTot").value) || prodOf(legs.map(l => l.odds));
     addBet({ date: $("#jDate").value, match: `Combiné · ${legs.length} sélections`, market: legs.map(l => `${l.match} : ${l.market}`).join(" + "), odds: tot, stake: s, prob, result: "attente", src, legs });
@@ -1027,6 +1117,37 @@ function renderPicks(sorted) {
       <td class="n" style="color:var(--${r.units > 0 ? "good" : r.units < 0 ? "bad" : "muted"})">${(r.units >= 0 ? "+" : "") + dec(r.units, 1)} u</td><td class="n">${r.cn ? `${r.cw} gagnées sur ${r.cn}` : "–"}</td></tr>`).join("") + "</tbody>";
 }
 
+/* Tableau croisé championnat × type de pari, sélection par sélection */
+let crossSrc = store.get("crossSrc", "tous");
+function renderCross(sorted) {
+  const all = sorted.flatMap(b => isCombo(b) ? b.legs.map(l => ({ ...l, src: l.src || b.src, result: legRes(l) })) : [b])
+    .filter(x => (x.result === "gagne" || x.result === "perdu") && (crossSrc === "tous" || srcOf(x) === crossSrc));
+  const wrap = $("#jCrossWrap");
+  const anySettled = sorted.some(b => b.result !== "attente" || (isCombo(b) && b.legs.some(l => legRes(l) !== "attente")));
+  wrap.hidden = !anySettled;
+  if (!anySettled) return;
+  const cell = g => { const w = g.filter(x => x.result === "gagne"); const u = w.reduce((a, x) => a + x.odds - 1, 0) - (g.length - w.length);
+    const att = g.reduce((a, x) => a + 1 / x.odds, 0) / (g.length || 1); return { n: g.length, w: w.length, u, att }; };
+  const lgs = [...new Set(all.map(leagueOf))].sort((a, b) => (L[a] ? Object.keys(L).indexOf(a) : 99) - (L[b] ? Object.keys(L).indexOf(b) : 99));
+  const tps = TYPES.filter(t => all.some(x => typeOf(x) === t));
+  const show = (c, strong) => { if (!c.n) return `<td class="n muted">–</td>`;
+    const k = Math.max(-1, Math.min(1, c.u / Math.max(3, c.n * 0.6)));   // intensité de la couleur selon le gain
+    const bg = c.u === 0 ? "" : `background:color-mix(in srgb, var(--${c.u > 0 ? "good" : "bad"}) ${Math.round(8 + Math.abs(k) * 32)}%, transparent);`;
+    return `<td class="n xc" style="${bg}${c.n < 5 ? "opacity:.65;" : ""}" title="${c.w} gagnés sur ${c.n} · réussite attendue d'après les cotes ${pct(c.att, 0)} · gain ${dec(c.u, 1)} mise(s)">
+      ${strong ? "<b>" : ""}${pct(c.w / c.n, 0)}${strong ? "</b>" : ""}<div class="muted">${c.w}/${c.n} · ${c.u >= 0 ? "+" : ""}${dec(c.u, 1)} u</div></td>`; };
+  const chips = [["tous", "Tous"], ["outil", "Outil"], ["moi", "Mes idées"]].map(([v, t]) => `<button type="button" class="chip" aria-pressed="${crossSrc === v}" data-cs="${v}">${t}</button>`).join("");
+  let h = `<div style="padding:16px 18px 6px"><div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><h3>Où ça marche : championnat × type de pari</h3><span class="row" style="gap:6px">${chips}</span></div>
+    <p class="muted" style="font-size:12px;margin:4px 0 0">Chaque sélection comptée seule (y compris dans les combinés). Dans chaque case : réussite, puis gagnés/joués et gain en mises (u). Vert = gagnant, rouge = perdant, case pâle = moins de 5 paris, pas encore significatif. Survolez ou touchez une case pour le détail.</p></div>`;
+  if (!all.length) { wrap.innerHTML = h + `<p class="muted" style="padding:0 18px 16px">Aucune sélection réglée pour ce filtre.</p>`; }
+  else {
+    h += `<div class="scroll-x"><table class="cross"><thead><tr><th>Championnat</th>${tps.map(t => `<th class="n">${t}</th>`).join("")}<th class="n">Total</th></tr></thead><tbody>` +
+      lgs.map(c => `<tr><td>${esc(leagueName(c))}${L[c] ? ` <span class="muted">${esc(L[c].pays)}</span>` : ""}</td>${tps.map(t => show(cell(all.filter(x => leagueOf(x) === c && typeOf(x) === t)))).join("")}${show(cell(all.filter(x => leagueOf(x) === c)), true)}</tr>`).join("") +
+      `<tr class="tot"><td><b>Total</b></td>${tps.map(t => show(cell(all.filter(x => typeOf(x) === t)), true)).join("")}${show(cell(all), true)}</tr></tbody></table></div>`;
+    wrap.innerHTML = h;
+  }
+  $$("#jCrossWrap [data-cs]").forEach(b => b.onclick = () => { crossSrc = b.dataset.cs; store.set("crossSrc", crossSrc); renderCross(bets.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)); });
+}
+
 /* Tableau « L'outil ou vos idées » */
 function renderOrigins(sorted) {
   const rows = [["outil", false, "Outil · paris simples"], ["outil", true, "Outil · combinés"], ["moi", false, "Mes idées · paris simples"], ["moi", true, "Mes idées · combinés"]]
@@ -1054,7 +1175,7 @@ function renderJournal() {
     tile("Profit attendu", exp ? (exp >= 0 ? "+" : "") + fcfa(exp) : "–", "selon vos probas : l'écart avec le réel, c'est la chance") +
     (() => { const cl = sorted.map(clvOf).filter(v => v != null); const m = cl.length ? cl.reduce((a, b) => a + b, 0) / cl.length : null;
       return tile("CLV moyenne", m == null ? "–" : (m >= 0 ? "+" : "") + pct(m), cl.length ? `sur ${cl.length} paris · positive = vous battez la cote de clôture` : "se calcule après les matchs, à la relance suivante", m == null ? null : m >= 0 ? "good" : "bad"); })();
-  renderOrigins(sorted); renderPicks(sorted);
+  renderOrigins(sorted); renderPicks(sorted); renderCross(sorted);
   for (const id of [...picked]) { const b = bets.find(x => String(x.id) === id); if (!b || isCombo(b) || b.result !== "attente") picked.delete(id); }
   if (!sorted.length) {
     $("#jTable").innerHTML = `<tbody><tr><td class="empty" colspan="11"><h3>Journal vide</h3>Ajoutez un pari ci-dessus, ou cliquez sur « Noter » à côté d'un pari conseillé.</td></tr></tbody>`;
@@ -1064,8 +1185,9 @@ function renderJournal() {
         return `<tr><td>${can ? `<input type="checkbox" data-pick="${b.id}" ${picked.has(String(b.id)) ? "checked" : ""} aria-label="Cocher pour un combiné">` : ""}</td>
         <td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td>
         <td><select class="sel" data-src="${b.id}" aria-label="Origine">${[["outil", "Outil"], ["moi", "Mon idée"]].map(([v, l]) => `<option value="${v}" ${srcOf(b) === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
-        <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections${(n => n ? `<div class="muted" style="font-size:12px">${b.legs.filter(l => legRes(l) === "gagne").length} sur ${n} gagnées</div>` : "")(b.legs.filter(l => ["gagne", "perdu"].includes(legRes(l))).length)}` : esc(b.match)}</td>
-        <td>${c ? `<ul class="legs">${b.legs.map((l, i) => `<li class="leg-${legRes(l)}">${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span>
+        <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections${(n => n ? `<div class="muted" style="font-size:12px">${b.legs.filter(l => legRes(l) === "gagne").length} sur ${n} gagnées</div>` : "")(b.legs.filter(l => ["gagne", "perdu"].includes(legRes(l))).length)}` : `${esc(b.match)}<div><select class="sel xs" data-lg="${b.id}" aria-label="Championnat">${leagueOpts(leagueOf(b))}</select> <span class="tag">${typeOf(b)}</span></div>`}</td>
+        <td>${c ? `<ul class="legs">${b.legs.map((l, i) => `<li class="leg-${legRes(l)}">${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span> <span class="tag">${typeOf(l)}</span>
+          <select class="sel xs" data-lgl="${b.id}|${i}" aria-label="Championnat">${leagueOpts(leagueOf(l))}</select>
           <select class="sel xs" data-leg="${b.id}|${i}" aria-label="Résultat de cette sélection">${RES.map(([v, t]) => `<option value="${v}" ${legRes(l) === v ? "selected" : ""}>${t}</option>`).join("")}</select></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}`}</td>
         <td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
         <td><select class="sel" data-r="${b.id}" aria-label="Résultat">${[["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]].map(([v, l]) => `<option value="${v}" ${b.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
@@ -1075,6 +1197,8 @@ function renderJournal() {
     $$("#jTable [data-r]").forEach(s => s.onchange = () => { const b = bets.find(x => String(x.id) === s.dataset.r); b.result = s.value;
       if (isCombo(b) && s.value === "gagne") b.legs.forEach(l => { if (legRes(l) === "attente") l.result = "gagne"; });   // ticket gagné = toutes les sélections gagnées
       saveBets(); renderJournal(); });
+    $$("#jTable [data-lg]").forEach(s => s.onchange = () => { bets.find(x => String(x.id) === s.dataset.lg).league = s.value || undefined; saveBets(); renderJournal(); });
+    $$("#jTable [data-lgl]").forEach(s => s.onchange = () => { const [id, i] = s.dataset.lgl.split("|"); bets.find(x => String(x.id) === id).legs[+i].league = s.value || undefined; saveBets(); renderJournal(); });
     $$("#jTable [data-leg]").forEach(s => s.onchange = () => { const [id, i] = s.dataset.leg.split("|"); const b = bets.find(x => String(x.id) === id);
       b.legs[+i].result = s.value; b.result = comboResult(b); saveBets(); renderJournal(); });
     $$("#jTable [data-src]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.src).src = s.value; saveBets(); renderJournal(); });
