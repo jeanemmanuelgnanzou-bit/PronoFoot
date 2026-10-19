@@ -162,6 +162,18 @@ details.panel summary::marker { color: var(--accent); }
 .jform { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
 .jform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .jform input, .jform select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+[hidden] { display: none !important; }
+.jlegs { display: grid; gap: 8px; }
+.jleg { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(70px, .6fr) auto; gap: 8px; align-items: end; }
+.jleg label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.jleg input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.jleg .x { width: 32px; height: 34px; padding: 0; }
+.jgroup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 2px solid var(--accent); }
+.jgroup input { width: 110px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.legs { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--fg-2); }
+.tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--line); color: var(--fg-2); white-space: nowrap; }
+.tag.o { background: var(--accent); color: #fff; }
+@media (max-width: 560px) { .jleg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .jleg label:first-child { grid-column: 1 / -1; } }
 .toast { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 50; }
 
 @media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
@@ -281,17 +293,23 @@ details.panel summary::marker { color: var(--accent); }
     <div class="stack">
       <div class="panel">
         <h3 style="margin-bottom:12px">Ajouter un pari</h3>
-        <form class="jform" id="jForm">
-          <label>Date<input type="date" id="jDate" required></label>
-          <label style="grid-column: span 2">Match<input id="jMatch" placeholder="Arsenal - Chelsea" required></label>
-          <label>Marché<input id="jMarket" placeholder="1, +2.5, Corners +9.5…" required></label>
-          <label>Cote<input id="jOdds" inputmode="decimal" placeholder="2,10" required></label>
-          <label>Mise (FCFA)<input id="jStake" inputmode="numeric" placeholder="2000" required></label>
-          <label>Proba estimée<input id="jProb" inputmode="decimal" placeholder="optionnel, ex. 52"></label>
-          <button class="btn" type="submit">Ajouter</button>
+        <form id="jForm">
+          <div class="jlegs" id="jLegs"></div>
+          <button class="btn ghost sm" type="button" id="jAddLeg" style="margin:6px 0 12px">+ Ajouter une sélection (combiné)</button>
+          <div class="jform">
+            <label>Date<input type="date" id="jDate" required></label>
+            <label>Origine<select id="jSrc"><option value="moi">Mon idée</option><option value="outil">Conseillé par l'outil</option></select></label>
+            <label id="jTotLab" hidden>Cote totale<input id="jTot" inputmode="decimal" title="Calculée automatiquement ; modifiable si le bookmaker applique un bonus"></label>
+            <label>Mise (FCFA)<input id="jStake" inputmode="numeric" placeholder="2000" required></label>
+            <label>Proba estimée<input id="jProb" inputmode="decimal" placeholder="optionnel, ex. 52"></label>
+            <button class="btn" type="submit">Ajouter</button>
+          </div>
         </form>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">Vous avez cliqué « Noter » sur plusieurs paris puis les avez joués ensemble ? Cochez-les dans le tableau ci-dessous et regroupez-les en combiné.</p>
       </div>
       <div class="tiles" id="jTiles"></div>
+      <div class="panel" style="padding:0" id="jOrigWrap" hidden><div style="padding:16px 18px 6px"><h3>L'outil ou vos idées : qui gagne ?</h3></div><div class="scroll-x"><table id="jOrig"></table></div></div>
+      <div class="panel jgroup" id="jGroup" hidden></div>
       <div class="panel">
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
           <h3>Évolution de la bankroll</h3>
@@ -469,7 +487,7 @@ function renderRecos() {
   $$("#recos [data-reco]").forEach(b => b.onclick = () => {
     const r = recos[+b.dataset.reco];
     const mid = Object.keys(MK).find(m => MK[m] === r.k);
-    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: recoLabel(r.f, r.k), odds: r.odds, stake: Math.round(r.stake / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book });
+    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: recoLabel(r.f, r.k), odds: r.odds, stake: Math.round(r.stake / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book, src: "outil" });
     toast("Pari ajouté au journal"); b.disabled = true; b.textContent = "Noté";
   });
 }
@@ -520,7 +538,7 @@ function renderProbables() {
   $$("#probables [data-prob]").forEach(b => b.onclick = () => {
     const r = rows[+b.dataset.prob];
     const mid = Object.keys(MK).find(x => MK[x] === r.k);
-    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: probLabel(r.f, r.k), odds: r.odds, stake: Math.round(mise / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book });
+    addBet({ date: r.f.date, match: `${r.f.home} - ${r.f.away}`, market: probLabel(r.f, r.k), odds: r.odds, stake: Math.round(mise / 100) * 100 || 100, prob: r.p, result: "attente", league: r.f.league, home: r.f.home, away: r.f.away, mid, book: r.book, src: "outil" });
     toast("Pari ajouté au journal"); b.disabled = true; b.textContent = "Noté";
   });
 }
@@ -698,7 +716,7 @@ function renderMarkets() {
     const r = rows.find(x => x.id === b.dataset.add); const o = parseNum(od[r.id]); const pref = r.pj || r.pm;
     const s = stakeFor(pref, o, r.pj ? C.edge_min_marche : C.edge_min);
     addBet({ date: fxm ? fxm.date : new Date().toISOString().slice(0, 10), match: `${cur.h} - ${cur.a}`, market: r.label, odds: o, stake: Math.round(s.stake / 100) * 100 || 100, prob: pref, result: "attente",
-      league: cur.l, home: cur.h, away: cur.a, mid: r.id, book: src[r.id] || null });
+      league: cur.l, home: cur.h, away: cur.a, mid: r.id, book: src[r.id] || null, src: "outil" });
     toast("Pari ajouté au journal");
   }));
 }
@@ -828,12 +846,13 @@ function renderFiab() {
         return `<tr><td>${esc(L[c].nom)} <span class="muted">${esc(L[c].pays)}</span></td><td class="n">${n2}</td><td class="n">${n2 ? pct(s.reussite, 0) : "–"}</td><td class="n">${roiCell(s)}</td><td class="n">${s && s.clv != null ? pct(s.clv) : "–"}</td><td>${pill}</td></tr>`; }).join("") + "</tbody></table></div></div>";
   }
   /* 5. Vos résultats réels */
-  const settled = (typeof bets !== "undefined" ? bets : []).filter(b => b.result === "gagne" || b.result === "perdu");
+  const mine = (typeof bets !== "undefined" ? bets : []).filter(b => srcOf(b) === "outil" && !isCombo(b));   // seuls les paris simples de l'outil sont comparables au backtest
+  const settled = mine.filter(b => b.result === "gagne" || b.result === "perdu");
   const staked = settled.reduce((a, b) => a + b.stake, 0), profit = settled.reduce((a, b) => a + profitOf(b), 0);
   const exp = settled.filter(b => b.prob).reduce((a, b) => a + b.stake * (b.prob * b.odds - 1), 0);
-  const cls2 = (typeof bets !== "undefined" ? bets : []).map(clvOf).filter(v => v != null);
+  const cls2 = mine.map(clvOf).filter(v => v != null);
   const clvM = cls2.length ? cls2.reduce((a, b) => a + b, 0) / cls2.length : null;
-  h += `<div class="panel"><h3 style="margin-bottom:8px">Vos résultats réels</h3>`;
+  h += `<div class="panel"><h3 style="margin-bottom:8px">Vos résultats réels</h3><p class="muted" style="font-size:12px;margin:-4px 0 10px">Paris simples conseillés par l'outil uniquement. Vos idées et vos combinés sont suivis à part, dans Mon journal.</p>`;
   if (!settled.length) h += `<p class="fg2" style="margin:0">Aucun pari réglé dans le journal pour l'instant. Notez vos paris avec le bouton « Noter », puis indiquez le résultat après le match : cette section comparera vos chiffres au backtest.</p></div>`;
   else {
     const verdict = settled.length < 50 ? "Encore trop tôt pour juger : attendez 50 à 100 paris." : clvM != null && clvM > 0 ? "Votre CLV est positive : vous prenez de bons prix, la méthode fonctionne." : "Votre CLV n'est pas positive : on revoit les réglages avant de continuer.";
@@ -879,21 +898,98 @@ function tile(label, v, s, tone) { return `<div class="tile"><div class="label">
 let bets = store.get("bets", []);
 const saveBets = () => store.set("bets", bets);
 function addBet(b) { bets.push({ id: Date.now() + Math.random(), ...b }); saveBets(); if (!$("#tab-journal").hidden) renderJournal(); }
+const srcOf = b => b.src || (b.mid ? "outil" : "moi");
+const isCombo = b => Array.isArray(b.legs) && b.legs.length > 1;
+const prodOf = a => a.reduce((x, y) => x * y, 1);
 $("#jDate").value = new Date().toISOString().slice(0, 10);
+
+/* Formulaire : une ou plusieurs sélections */
+let totTouched = false;
+function legRow() {
+  const d = document.createElement("div"); d.className = "jleg";
+  d.innerHTML = `<label>Match<input data-f="match" placeholder="Arsenal - Chelsea" required></label>
+    <label>Marché<input data-f="market" placeholder="1, +2.5, BTTS…" required></label>
+    <label>Cote<input data-f="odds" inputmode="decimal" placeholder="2,10" required></label>
+    <button class="btn ghost sm x" type="button" aria-label="Retirer cette sélection">✕</button>`;
+  d.querySelector(".x").onclick = () => { d.remove(); syncLegs(); };
+  d.querySelector('[data-f="odds"]').addEventListener("input", syncLegs);
+  $("#jLegs").appendChild(d); syncLegs();
+}
+function legsData() { return $$("#jLegs .jleg").map(r => ({ match: r.querySelector('[data-f="match"]').value.trim(), market: r.querySelector('[data-f="market"]').value.trim(), odds: parseNum(r.querySelector('[data-f="odds"]').value) })); }
+function syncLegs() {
+  const rows = $$("#jLegs .jleg"), combo = rows.length > 1;
+  rows.forEach(r => r.querySelector(".x").hidden = !combo);
+  $("#jTotLab").hidden = !combo;
+  if (combo && !totTouched) { const os = legsData().map(l => l.odds); $("#jTot").value = os.every(o => o > 1) ? dec(prodOf(os)) : ""; }
+}
+$("#jAddLeg").onclick = legRow;
+$("#jTot").addEventListener("input", () => totTouched = true);
+legRow();
 $("#jForm").addEventListener("submit", e => {
   e.preventDefault();
-  const o = parseNum($("#jOdds").value), s = parseNum($("#jStake").value), p = parseNum($("#jProb").value);
-  if (!o || o <= 1 || !s) { toast("Vérifiez la cote (> 1) et la mise"); return; }
-  addBet({ date: $("#jDate").value, match: $("#jMatch").value.trim(), market: $("#jMarket").value.trim(), odds: o, stake: s, prob: p ? (p > 1 ? p / 100 : p) : null, result: "attente" });
-  ["#jMatch", "#jMarket", "#jOdds", "#jStake", "#jProb"].forEach(s => $(s).value = ""); toast("Pari ajouté");
+  const legs = legsData(), s = parseNum($("#jStake").value), p = parseNum($("#jProb").value), src = $("#jSrc").value;
+  if (legs.some(l => !l.odds || l.odds <= 1) || !s) { toast("Vérifiez les cotes (> 1) et la mise"); return; }
+  const prob = p ? (p > 1 ? p / 100 : p) : null;
+  if (legs.length === 1) addBet({ date: $("#jDate").value, match: legs[0].match, market: legs[0].market, odds: legs[0].odds, stake: s, prob, result: "attente", src });
+  else {
+    const tot = parseNum($("#jTot").value) || prodOf(legs.map(l => l.odds));
+    addBet({ date: $("#jDate").value, match: `Combiné · ${legs.length} sélections`, market: legs.map(l => `${l.match} : ${l.market}`).join(" + "), odds: tot, stake: s, prob, result: "attente", src, legs });
+  }
+  $("#jLegs").innerHTML = ""; totTouched = false; $("#jTot").value = ""; $("#jStake").value = ""; $("#jProb").value = ""; $("#jSrc").value = "moi"; legRow();
+  toast("Pari ajouté");
 });
-function clvOf(b) {
+
+function clvSingle(b) {
   if (!b.league || !MK[b.mid]) return null;
   const c = (DATA.clotures || {})[`${b.league}|${b.home}|${b.away}`];
   const close = c && c[MK[b.mid]];
   return close ? b.odds / close - 1 : null;
 }
+function clvOf(b) {
+  if (!isCombo(b)) return clvSingle(b);
+  const v = b.legs.map(clvSingle);   // combiné : CLV seulement si chaque sélection a sa cote de clôture
+  return v.every(x => x != null) ? prodOf(v.map(x => 1 + x)) - 1 : null;
+}
 const profitOf = b => b.result === "gagne" ? b.stake * (b.odds - 1) : b.result === "perdu" ? -b.stake : 0;
+
+/* Regrouper des paris notés en un combiné */
+let picked = new Set();
+function renderGroup() {
+  const sel = bets.filter(b => picked.has(String(b.id)));
+  const box = $("#jGroup");
+  if (sel.length < 2) { box.hidden = true; box.innerHTML = ""; return; }
+  const tot = prodOf(sel.map(b => b.odds));
+  box.hidden = false;
+  box.innerHTML = `<b>${sel.length} paris cochés</b><span>Cote totale <input id="gTot" inputmode="decimal" value="${dec(tot)}" aria-label="Cote totale du combiné"></span>
+    <span>Mise du combiné <input id="gStake" inputmode="numeric" value="${Math.max(...sel.map(b => b.stake))}" aria-label="Mise du combiné"></span>
+    <button class="btn sm" id="gGo" type="button">Regrouper en combiné</button><button class="btn ghost sm" id="gNo" type="button">Annuler</button>`;
+  $("#gNo").onclick = () => { picked.clear(); renderJournal(); };
+  $("#gGo").onclick = () => {
+    const o = parseNum($("#gTot").value), s = parseNum($("#gStake").value);
+    if (!o || o <= 1 || !s) { toast("Vérifiez la cote et la mise"); return; }
+    const legs = sel.slice().sort((a, b) => a.date.localeCompare(b.date)).map(({ id, stake, result, ...l }) => l);
+    const probs = legs.map(l => l.prob);
+    bets = bets.filter(b => !picked.has(String(b.id)));
+    picked.clear();
+    addBet({ date: legs[0].date, match: `Combiné · ${legs.length} sélections`, market: legs.map(l => `${l.match} : ${l.market}`).join(" + "), odds: o, stake: s,
+      prob: probs.every(p => p) ? prodOf(probs) : null, result: "attente", src: legs.every(l => srcOf(l) === "outil") ? "outil" : "moi", legs });
+    renderJournal(); toast("Combiné créé");
+  };
+}
+
+/* Tableau « L'outil ou vos idées » */
+function renderOrigins(sorted) {
+  const rows = [["outil", false, "Outil · paris simples"], ["outil", true, "Outil · combinés"], ["moi", false, "Mes idées · paris simples"], ["moi", true, "Mes idées · combinés"]]
+    .map(([s, c, lab]) => { const g = sorted.filter(b => srcOf(b) === s && isCombo(b) === c); const st = g.filter(b => b.result === "gagne" || b.result === "perdu");
+      const mis = st.reduce((a, b) => a + b.stake, 0), pr = st.reduce((a, b) => a + profitOf(b), 0);
+      return { lab, n: g.length, st: st.length, win: st.filter(b => b.result === "gagne").length, mis, pr }; })
+    .filter(r => r.n);
+  $("#jOrigWrap").hidden = !rows.length;
+  $("#jOrig").innerHTML = `<thead><tr><th>Origine</th><th class="n">Paris réglés</th><th class="n">Réussite</th><th class="n">Misé</th><th class="n">Gain</th><th class="n">ROI</th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td>${r.lab}</td><td class="n">${r.st}${r.n > r.st ? ` <span class="muted">(+${r.n - r.st} en attente)</span>` : ""}</td><td class="n">${r.st ? pct(r.win / r.st, 0) : "–"}</td><td class="n">${fcfa(r.mis)}</td>
+      <td class="n" style="color:var(--${r.pr > 0 ? "good" : r.pr < 0 ? "bad" : "muted"})">${r.st ? (r.pr >= 0 ? "+" : "") + fcfa(r.pr) : "–"}</td><td class="n">${r.mis ? pct(r.pr / r.mis) : "–"}</td></tr>`).join("") + "</tbody>";
+}
+
 function renderJournal() {
   const sorted = bets.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   const settled = sorted.filter(b => b.result === "gagne" || b.result === "perdu");
@@ -907,21 +1003,38 @@ function renderJournal() {
     tile("Profit attendu", exp ? (exp >= 0 ? "+" : "") + fcfa(exp) : "–", "selon vos probas : l'écart avec le réel, c'est la chance") +
     (() => { const cl = sorted.map(clvOf).filter(v => v != null); const m = cl.length ? cl.reduce((a, b) => a + b, 0) / cl.length : null;
       return tile("CLV moyenne", m == null ? "–" : (m >= 0 ? "+" : "") + pct(m), cl.length ? `sur ${cl.length} paris · positive = vous battez la cote de clôture` : "se calcule après les matchs, à la relance suivante", m == null ? null : m >= 0 ? "good" : "bad"); })();
+  renderOrigins(sorted);
+  for (const id of [...picked]) { const b = bets.find(x => String(x.id) === id); if (!b || isCombo(b) || b.result !== "attente") picked.delete(id); }
   if (!sorted.length) {
-    $("#jTable").innerHTML = `<tbody><tr><td class="empty" colspan="9"><h3>Journal vide</h3>Ajoutez un pari ci-dessus, ou cliquez sur « Noter » à côté d'une mise conseillée dans l'onglet Analyser un match.</td></tr></tbody>`;
+    $("#jTable").innerHTML = `<tbody><tr><td class="empty" colspan="11"><h3>Journal vide</h3>Ajoutez un pari ci-dessus, ou cliquez sur « Noter » à côté d'un pari conseillé.</td></tr></tbody>`;
   } else {
-    $("#jTable").innerHTML = `<thead><tr><th>Date</th><th>Match</th><th>Marché</th><th class="n">Cote</th><th class="n">Mise</th><th>Résultat</th><th class="n">Gain</th><th class="n" title="Votre cote comparée à la cote de clôture Pinnacle">CLV</th><th></th></tr></thead><tbody>` +
-      sorted.slice().reverse().map(b => `<tr><td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td><td>${esc(b.match)}</td><td>${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}</td><td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
+    $("#jTable").innerHTML = `<thead><tr><th title="Cochez des paris en attente pour les regrouper en combiné">Comb.</th><th>Date</th><th>Origine</th><th>Match</th><th>Marché</th><th class="n">Cote</th><th class="n">Mise</th><th>Résultat</th><th class="n">Gain</th><th class="n" title="Votre cote comparée à la cote de clôture Pinnacle">CLV</th><th></th></tr></thead><tbody>` +
+      sorted.slice().reverse().map(b => { const c = isCombo(b), can = !c && b.result === "attente";
+        return `<tr><td>${can ? `<input type="checkbox" data-pick="${b.id}" ${picked.has(String(b.id)) ? "checked" : ""} aria-label="Cocher pour un combiné">` : ""}</td>
+        <td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td>
+        <td><select class="sel" data-src="${b.id}" aria-label="Origine">${[["outil", "Outil"], ["moi", "Mon idée"]].map(([v, l]) => `<option value="${v}" ${srcOf(b) === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+        <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections` : esc(b.match)}</td>
+        <td>${c ? `<ul class="legs">${b.legs.map(l => `<li>${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}`}</td>
+        <td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
         <td><select class="sel" data-r="${b.id}" aria-label="Résultat">${[["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]].map(([v, l]) => `<option value="${v}" ${b.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
         <td class="n" style="color:var(--${profitOf(b) > 0 ? "good" : profitOf(b) < 0 ? "bad" : "muted"})">${b.result === "attente" ? "–" : (profitOf(b) >= 0 ? "+" : "") + fcfa(profitOf(b))}</td>
         <td class="n">${(v => v == null ? '<span class="muted">–</span>' : `<span style="color:var(--${v >= 0 ? "good" : "bad"})">${v >= 0 ? "+" : ""}${pct(v)}</span>`)(clvOf(b))}</td>
-        <td><button class="btn ghost sm" data-del="${b.id}" aria-label="Supprimer">Supprimer</button></td></tr>`).join("") + "</tbody>";
+        <td>${c ? `<button class="btn ghost sm" data-split="${b.id}" type="button">Séparer</button> ` : ""}<button class="btn ghost sm" data-del="${b.id}" aria-label="Supprimer">Supprimer</button></td></tr>`; }).join("") + "</tbody>";
     $$("#jTable [data-r]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.r).result = s.value; saveBets(); renderJournal(); });
+    $$("#jTable [data-src]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.src).src = s.value; saveBets(); renderJournal(); });
+    $$("#jTable [data-pick]").forEach(cb => cb.onchange = () => { cb.checked ? picked.add(cb.dataset.pick) : picked.delete(cb.dataset.pick); renderGroup(); });
+    $$("#jTable [data-split]").forEach(btn => btn.onclick = () => {   // défait un combiné : chaque sélection redevient un pari simple en attente
+      const b = bets.find(x => String(x.id) === btn.dataset.split); if (!b) return;
+      bets = bets.filter(x => x !== b);
+      b.legs.forEach((l, i) => bets.push({ id: Date.now() + i + Math.random(), ...l, date: l.date || b.date, stake: l.stake || b.stake, result: "attente", src: l.src || b.src }));
+      saveBets(); renderJournal(); toast("Combiné séparé");
+    });
     $$("#jTable [data-del]").forEach(btn => btn.onclick = () => {
       if (btn.dataset.confirm) { bets = bets.filter(b => String(b.id) !== btn.dataset.del); saveBets(); renderJournal(); }
       else { btn.dataset.confirm = 1; btn.textContent = "Confirmer"; btn.classList.remove("ghost"); }
     });
   }
+  renderGroup();
   if (chartDefaults() === false) return;
   let bank = start; const pts = [{ x: "Départ", y: start }];
   settled.forEach((b, i) => { bank += profitOf(b); pts.push({ x: `${i + 1}`, y: bank }); });
@@ -931,7 +1044,8 @@ function renderJournal() {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fcfa(c.parsed.y) } } } } });
 }
 $("#jCsv").addEventListener("click", () => {
-  const csv = "date;match;marche;bookmaker;cote;mise;proba;resultat;gain;clv\n" + bets.map(b => [b.date, b.match, b.market, b.book || "", b.odds, b.stake, b.prob ?? "", b.result, profitOf(b), clvOf(b) ?? ""].join(";")).join("\n");
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = "date;origine;type;match;marche;bookmaker;cote;mise;proba;resultat;gain;clv\n" + bets.map(b => [b.date, srcOf(b) === "outil" ? "outil" : "mon idée", isCombo(b) ? "combiné" : "simple", q(b.match), q(b.market), b.book || "", b.odds, b.stake, b.prob ?? "", b.result, profitOf(b), clvOf(b) ?? ""].join(";")).join("\n");
   navigator.clipboard.writeText(csv).then(() => toast("Journal copié : collez-le dans Excel"), () => toast("Copie refusée par le navigateur"));
 });
 
