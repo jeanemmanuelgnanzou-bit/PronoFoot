@@ -317,7 +317,8 @@ details.panel summary::marker { color: var(--accent); }
       <div class="panel xfer" id="jXferBox" hidden>
         <div>
           <h3>1. Sur l'appareil qui a les paris</h3>
-          <p class="muted">Copiez le code, puis envoyez-le-vous (WhatsApp, e-mail…).</p>
+          <p class="muted">Voici le code de votre journal. Copiez-le, puis envoyez-le-vous (WhatsApp, e-mail…).</p>
+          <textarea id="xOut" rows="3" readonly aria-label="Code de votre journal"></textarea>
           <div class="row" style="gap:8px"><button class="btn sm" id="xCopy" type="button">Copier le code</button><button class="btn ghost sm" id="xShare" type="button" hidden>Partager…</button></div>
           <p class="muted" id="xInfo" style="margin-top:8px"></p>
         </div>
@@ -1040,7 +1041,7 @@ function renderOrigins(sorted) {
 }
 
 function renderJournal() {
-  $("#xInfo").textContent = `${bets.length} pari${bets.length > 1 ? "s" : ""} dans ce journal.`;
+  fillXfer();
   const sorted = bets.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   const settled = sorted.filter(b => b.result === "gagne" || b.result === "perdu");
   const staked = settled.reduce((s, b) => s + b.stake, 0), profit = settled.reduce((s, b) => s + profitOf(b), 0);
@@ -1115,13 +1116,21 @@ function importCode(txt) {
   }
   saveBets(); return { add, upd };
 }
-$("#jXfer").addEventListener("click", () => { const box = $("#jXferBox"); box.hidden = !box.hidden;
-  $("#xShare").hidden = !navigator.share; $("#xInfo").textContent = `${bets.length} pari${bets.length > 1 ? "s" : ""} dans ce journal.`; });
+function fillXfer() {
+  const n = bets.length;
+  $("#xOut").value = n ? exportCode() : "";
+  $("#xOut").placeholder = "Journal vide sur cet appareil : rien à transférer.";
+  $("#xInfo").textContent = n ? `${n} pari${n > 1 ? "s" : ""} dans ce journal.` : "Aucun pari noté sur cet appareil. Faites le transfert depuis l'appareil où vous avez noté vos paris.";
+  $("#xCopy").disabled = !n; $("#xShare").hidden = !navigator.share || !n;
+}
+$("#jXfer").addEventListener("click", () => { const box = $("#jXferBox"); box.hidden = !box.hidden; fillXfer(); if (!box.hidden) box.scrollIntoView({ behavior: "smooth", block: "start" }); });
+$("#xOut").addEventListener("focus", e => e.target.select());
 $("#xCopy").addEventListener("click", () => {
-  if (!bets.length) { toast("Journal vide : rien à transférer"); return; }
-  const c = exportCode();
-  (navigator.clipboard ? navigator.clipboard.writeText(c) : Promise.reject()).then(() => toast("Code copié : collez-le dans WhatsApp ou un e-mail"),
-    () => { $("#xIn").value = c; $("#xIn").select(); toast("Copie bloquée : le code est sélectionné dans la case, copiez-le à la main"); });
+  const t = $("#xOut"); if (!t.value) return;
+  t.focus(); t.select(); t.setSelectionRange(0, t.value.length);
+  const ok = () => toast("Code copié : collez-le dans WhatsApp ou un e-mail");
+  const manual = () => { let r = false; try { r = document.execCommand("copy"); } catch (e) {} r ? ok() : toast("Copie bloquée : le code est sélectionné, faites un appui long puis Copier"); };
+  navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(t.value).then(ok, manual) : manual();
 });
 $("#xShare").addEventListener("click", () => { if (bets.length) navigator.share({ title: "Journal PronoFoot", text: exportCode() }).catch(() => {}); });
 $("#xImp").addEventListener("click", () => {
