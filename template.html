@@ -163,6 +163,9 @@ details.panel summary::marker { color: var(--accent); }
 .jform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .jform input, .jform select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
 [hidden] { display: none !important; }
+.xfer { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; border: 2px solid var(--accent); }
+.xfer h3 { margin-bottom: 4px; } .xfer p { font-size: 12px; margin: 0 0 8px; }
+.xfer textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: 12px ui-monospace, monospace; resize: vertical; }
 #jTable td.n { white-space: nowrap; }
 .jlegs { display: grid; gap: 8px; }
 .jleg { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(70px, .6fr) auto; gap: 8px; align-items: end; }
@@ -311,6 +314,20 @@ details.panel summary::marker { color: var(--accent); }
         </form>
         <p class="muted" style="font-size:12px;margin:10px 0 0">Vous avez cliqué « Noter » sur plusieurs paris puis les avez joués ensemble ? Cochez-les dans le tableau ci-dessous et regroupez-les en combiné.</p>
       </div>
+      <div class="panel xfer" id="jXferBox" hidden>
+        <div>
+          <h3>1. Sur l'appareil qui a les paris</h3>
+          <p class="muted">Copiez le code, puis envoyez-le-vous (WhatsApp, e-mail…).</p>
+          <div class="row" style="gap:8px"><button class="btn sm" id="xCopy" type="button">Copier le code</button><button class="btn ghost sm" id="xShare" type="button" hidden>Partager…</button></div>
+          <p class="muted" id="xInfo" style="margin-top:8px"></p>
+        </div>
+        <div>
+          <h3>2. Sur l'autre appareil</h3>
+          <p class="muted">Collez le code reçu ici. Les paris s'ajoutent à ceux déjà présents, sans doublon.</p>
+          <textarea id="xIn" rows="3" placeholder="PRONOFOOT1:…" aria-label="Code du journal à importer"></textarea>
+          <button class="btn sm" id="xImp" type="button" style="margin-top:8px">Importer</button>
+        </div>
+      </div>
       <div class="tiles" id="jTiles"></div>
       <div class="panel" style="padding:0" id="jOrigWrap" hidden><div style="padding:16px 18px 6px"><h3>L'outil ou vos idées : qui gagne ?</h3></div><div class="scroll-x"><table id="jOrig"></table></div></div>
       <div class="panel" style="padding:0" id="jPicksWrap" hidden><div style="padding:16px 18px 6px"><h3>Sélection par sélection</h3><p class="muted" style="font-size:12px;margin:4px 0 0">Chaque sélection comptée seule, y compris celles de vos combinés : savoir si vous choisissez bien, même quand le ticket perd. « Réussite » au-dessus d'« Attendue » = vous trouvez mieux que ce que disent les cotes. 1 u = une mise.</p></div><div class="scroll-x"><table id="jPicks"></table></div></div>
@@ -318,7 +335,7 @@ details.panel summary::marker { color: var(--accent); }
       <div class="panel">
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
           <h3>Évolution de la bankroll</h3>
-          <button class="btn ghost sm" id="jCsv" type="button">Copier en CSV</button>
+          <span class="row" style="gap:8px"><button class="btn sm" id="jXfer" type="button">Transférer mon journal</button><button class="btn ghost sm" id="jCsv" type="button">Copier en CSV</button></span>
         </div>
         <div class="chartbox"><canvas id="jChart" aria-label="Évolution de la bankroll"></canvas></div>
       </div>
@@ -1023,6 +1040,7 @@ function renderOrigins(sorted) {
 }
 
 function renderJournal() {
+  $("#xInfo").textContent = `${bets.length} pari${bets.length > 1 ? "s" : ""} dans ce journal.`;
   const sorted = bets.slice().sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   const settled = sorted.filter(b => b.result === "gagne" || b.result === "perdu");
   const staked = settled.reduce((s, b) => s + b.stake, 0), profit = settled.reduce((s, b) => s + profitOf(b), 0);
@@ -1080,6 +1098,38 @@ function renderJournal() {
     options: { maintainAspectRatio: false, scales: { x: { title: { display: true, text: "paris réglés" }, grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: css("--line") }, ticks: { maxTicksLimit: 6, callback: v => new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }).format(v) } } },
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fcfa(c.parsed.y) } } } } });
 }
+/* Transfert du journal entre appareils : un code texte à copier-coller */
+const exportCode = () => "PRONOFOOT1:" + btoa(unescape(encodeURIComponent(JSON.stringify(bets))));
+function importCode(txt) {
+  const m = String(txt).replace(/\s/g, "").match(/PRONOFOOT1:([A-Za-z0-9+/=]+)/);
+  if (!m) return null;
+  let arr; try { arr = JSON.parse(decodeURIComponent(escape(atob(m[1])))); } catch (e) { return null; }
+  if (!Array.isArray(arr)) return null;
+  const done = b => (b.result !== "attente" ? 1 : 0) + (isCombo(b) ? b.legs.filter(l => legRes(l) !== "attente").length : 0);
+  let add = 0, upd = 0;
+  for (const nb of arr) {
+    if (!nb || nb.id == null || !nb.odds) continue;
+    const i = bets.findIndex(b => String(b.id) === String(nb.id));
+    if (i < 0) { bets.push(nb); add++; }
+    else if (done(nb) > done(bets[i])) { bets[i] = nb; upd++; }   // même pari : on garde la version la plus à jour
+  }
+  saveBets(); return { add, upd };
+}
+$("#jXfer").addEventListener("click", () => { const box = $("#jXferBox"); box.hidden = !box.hidden;
+  $("#xShare").hidden = !navigator.share; $("#xInfo").textContent = `${bets.length} pari${bets.length > 1 ? "s" : ""} dans ce journal.`; });
+$("#xCopy").addEventListener("click", () => {
+  if (!bets.length) { toast("Journal vide : rien à transférer"); return; }
+  const c = exportCode();
+  (navigator.clipboard ? navigator.clipboard.writeText(c) : Promise.reject()).then(() => toast("Code copié : collez-le dans WhatsApp ou un e-mail"),
+    () => { $("#xIn").value = c; $("#xIn").select(); toast("Copie bloquée : le code est sélectionné dans la case, copiez-le à la main"); });
+});
+$("#xShare").addEventListener("click", () => { if (bets.length) navigator.share({ title: "Journal PronoFoot", text: exportCode() }).catch(() => {}); });
+$("#xImp").addEventListener("click", () => {
+  const r = importCode($("#xIn").value);
+  if (!r) { toast("Code non reconnu : vérifiez qu'il a été copié en entier"); return; }
+  $("#xIn").value = ""; renderJournal();
+  toast(r.add || r.upd ? `${r.add} pari${r.add > 1 ? "s" : ""} ajouté${r.add > 1 ? "s" : ""}${r.upd ? `, ${r.upd} mis à jour` : ""}` : "Rien de nouveau : ces paris étaient déjà là");
+});
 $("#jCsv").addEventListener("click", () => {
   const q = v => `"${String(v).replace(/"/g, '""')}"`;
   const csv = "date;origine;type;match;marche;bookmaker;cote;mise;proba;resultat;gain;clv\n" + bets.map(b => [b.date, srcOf(b) === "outil" ? "outil" : "mon idée", isCombo(b) ? "combiné" : "simple", q(b.match), q(b.market), b.book || "", b.odds, b.stake, b.prob ?? "", b.result, profitOf(b), clvOf(b) ?? ""].join(";")).join("\n");
