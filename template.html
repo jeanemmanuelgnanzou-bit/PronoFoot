@@ -319,14 +319,14 @@ details.panel summary::marker { color: var(--accent); }
           <h3>1. Sur l'appareil qui a les paris</h3>
           <p class="muted">Voici le code de votre journal. Copiez-le, puis envoyez-le-vous (WhatsApp, e-mail…).</p>
           <textarea id="xOut" rows="3" readonly aria-label="Code de votre journal"></textarea>
-          <div class="row" style="gap:8px"><button class="btn sm" id="xCopy" type="button">Copier le code</button><button class="btn ghost sm" id="xShare" type="button" hidden>Partager…</button></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm" id="xCopy" type="button">Copier le code</button><button class="btn ghost sm" id="xFile" type="button">Enregistrer en fichier</button><button class="btn ghost sm" id="xShare" type="button" hidden>Partager…</button></div>
           <p class="muted" id="xInfo" style="margin-top:8px"></p>
         </div>
         <div>
           <h3>2. Sur l'autre appareil</h3>
           <p class="muted">Collez le code reçu ici. Les paris s'ajoutent à ceux déjà présents, sans doublon.</p>
           <textarea id="xIn" rows="3" placeholder="PRONOFOOT1:…" aria-label="Code du journal à importer"></textarea>
-          <button class="btn sm" id="xImp" type="button" style="margin-top:8px">Importer</button>
+          <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" id="xImp" type="button">Importer</button><label class="btn ghost sm" style="cursor:pointer">Ouvrir un fichier<input type="file" id="xFileIn" accept=".txt,text/plain" hidden></label></div>
         </div>
       </div>
       <div class="tiles" id="jTiles"></div>
@@ -366,7 +366,7 @@ const fcfa = x => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).f
 const parseNum = s => { const v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isFinite(v) ? v : null; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2200); }
+function toast(msg, ms = 2200) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, ms); }
 
 /* ---------- Mathématiques des modèles (identiques à models.py) ---------- */
 const LG_COEF = [676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
@@ -1101,11 +1101,23 @@ function renderJournal() {
 }
 /* Transfert du journal entre appareils : un code texte à copier-coller */
 const exportCode = () => "PRONOFOOT1:" + btoa(unescape(encodeURIComponent(JSON.stringify(bets))));
+function decodeCode(txt) {
+  // Tolère ce que WhatsApp, l'e-mail ou le copier-coller ajoutent : texte autour, retours à la ligne, caractères invisibles
+  let t = String(txt || "");
+  const k = t.toUpperCase().indexOf("PRONOFOOT1");
+  if (k >= 0) t = t.slice(k + 10);
+  t = t.replace(/[-_]/g, c => c === "-" ? "+" : "/").replace(/[^A-Za-z0-9+/]/g, "");
+  const st = t.indexOf("W3s");   // le code commence toujours par « W3s » (début d'une liste de paris)
+  if (st > 0) t = t.slice(st);
+  if (!t) return { err: "vide" };
+  while (t.length % 4) t += "=";
+  try { const arr = JSON.parse(decodeURIComponent(escape(atob(t)))); return Array.isArray(arr) ? { arr } : { err: "abime", n: t.length }; }
+  catch (e) { return { err: "abime", n: t.length }; }
+}
 function importCode(txt) {
-  const m = String(txt).replace(/\s/g, "").match(/PRONOFOOT1:([A-Za-z0-9+/=]+)/);
-  if (!m) return null;
-  let arr; try { arr = JSON.parse(decodeURIComponent(escape(atob(m[1])))); } catch (e) { return null; }
-  if (!Array.isArray(arr)) return null;
+  const d = decodeCode(txt);
+  if (d.err) return d;
+  const arr = d.arr;
   const done = b => (b.result !== "attente" ? 1 : 0) + (isCombo(b) ? b.legs.filter(l => legRes(l) !== "attente").length : 0);
   let add = 0, upd = 0;
   for (const nb of arr) {
@@ -1120,7 +1132,7 @@ function fillXfer() {
   const n = bets.length;
   $("#xOut").value = n ? exportCode() : "";
   $("#xOut").placeholder = "Journal vide sur cet appareil : rien à transférer.";
-  $("#xInfo").textContent = n ? `${n} pari${n > 1 ? "s" : ""} dans ce journal.` : "Aucun pari noté sur cet appareil. Faites le transfert depuis l'appareil où vous avez noté vos paris.";
+  $("#xInfo").textContent = n ? `${n} pari${n > 1 ? "s" : ""} dans ce journal · code de ${$("#xOut").value.length} caractères.` : "Aucun pari noté sur cet appareil. Faites le transfert depuis l'appareil où vous avez noté vos paris.";
   $("#xCopy").disabled = !n; $("#xShare").hidden = !navigator.share || !n;
 }
 $("#jXfer").addEventListener("click", () => { const box = $("#jXferBox"); box.hidden = !box.hidden; fillXfer(); if (!box.hidden) box.scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -1132,10 +1144,23 @@ $("#xCopy").addEventListener("click", () => {
   const manual = () => { let r = false; try { r = document.execCommand("copy"); } catch (e) {} r ? ok() : toast("Copie bloquée : le code est sélectionné, faites un appui long puis Copier"); };
   navigator.clipboard && window.isSecureContext ? navigator.clipboard.writeText(t.value).then(ok, manual) : manual();
 });
+function journalFile() { return new File([exportCode()], `journal-pronofoot-${new Date().toISOString().slice(0, 10)}.txt`, { type: "text/plain" }); }
+$("#xFile").addEventListener("click", () => {
+  if (!bets.length) return;
+  const f = journalFile();
+  if (navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f], title: "Journal PronoFoot" }).catch(() => {}); return; }   // téléphone : envoi direct par WhatsApp, e-mail…
+  const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast(`Fichier ${f.name} enregistré dans vos Téléchargements`);
+});
+$("#xFileIn").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(txt => { $("#xIn").value = txt; $("#xImp").click(); e.target.value = ""; });
+});
 $("#xShare").addEventListener("click", () => { if (bets.length) navigator.share({ title: "Journal PronoFoot", text: exportCode() }).catch(() => {}); });
 $("#xImp").addEventListener("click", () => {
   const r = importCode($("#xIn").value);
-  if (!r) { toast("Code non reconnu : vérifiez qu'il a été copié en entier"); return; }
+  if (r.err === "vide") { toast("Collez d'abord le code dans la case"); return; }
+  if (r.err) { toast(`Code abîmé ou incomplet (${r.n} caractères reçus). Utilisez plutôt le fichier : « Enregistrer en fichier » sur l'ordinateur, puis « Ouvrir un fichier » ici.`, 7000); return; }
   $("#xIn").value = ""; renderJournal();
   toast(r.add || r.upd ? `${r.add} pari${r.add > 1 ? "s" : ""} ajouté${r.add > 1 ? "s" : ""}${r.upd ? `, ${r.upd} mis à jour` : ""}` : "Rien de nouveau : ces paris étaient déjà là");
 });
