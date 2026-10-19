@@ -163,6 +163,7 @@ details.panel summary::marker { color: var(--accent); }
 .jform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .jform input, .jform select { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
 [hidden] { display: none !important; }
+#jTable td.n { white-space: nowrap; }
 .jlegs { display: grid; gap: 8px; }
 .jleg { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(70px, .6fr) auto; gap: 8px; align-items: end; }
 .jleg label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
@@ -171,6 +172,9 @@ details.panel summary::marker { color: var(--accent); }
 .jgroup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 2px solid var(--accent); }
 .jgroup input { width: 110px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .legs { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--fg-2); }
+.legs li { margin-bottom: 4px; }
+.legs .leg-gagne { color: var(--good); } .legs .leg-perdu { color: var(--bad); text-decoration: line-through; }
+.sel.xs { font-size: 11px; padding: 1px 4px; margin-left: 4px; color: var(--fg); text-decoration: none; }
 .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--line); color: var(--fg-2); white-space: nowrap; }
 .tag.o { background: var(--accent); color: #fff; }
 @media (max-width: 560px) { .jleg { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .jleg label:first-child { grid-column: 1 / -1; } }
@@ -309,6 +313,7 @@ details.panel summary::marker { color: var(--accent); }
       </div>
       <div class="tiles" id="jTiles"></div>
       <div class="panel" style="padding:0" id="jOrigWrap" hidden><div style="padding:16px 18px 6px"><h3>L'outil ou vos idées : qui gagne ?</h3></div><div class="scroll-x"><table id="jOrig"></table></div></div>
+      <div class="panel" style="padding:0" id="jPicksWrap" hidden><div style="padding:16px 18px 6px"><h3>Sélection par sélection</h3><p class="muted" style="font-size:12px;margin:4px 0 0">Chaque sélection comptée seule, y compris celles de vos combinés : savoir si vous choisissez bien, même quand le ticket perd. « Réussite » au-dessus d'« Attendue » = vous trouvez mieux que ce que disent les cotes. 1 u = une mise.</p></div><div class="scroll-x"><table id="jPicks"></table></div></div>
       <div class="panel jgroup" id="jGroup" hidden></div>
       <div class="panel">
         <div class="row" style="justify-content:space-between; margin-bottom:8px">
@@ -950,7 +955,17 @@ function clvOf(b) {
   const v = b.legs.map(clvSingle);   // combiné : CLV seulement si chaque sélection a sa cote de clôture
   return v.every(x => x != null) ? prodOf(v.map(x => 1 + x)) - 1 : null;
 }
-const profitOf = b => b.result === "gagne" ? b.stake * (b.odds - 1) : b.result === "perdu" ? -b.stake : 0;
+const RES = [["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]];
+const legRes = l => l.result || "attente";
+function comboResult(b) {   // une sélection perdue = ticket perdu ; toutes passées = ticket gagné
+  const rs = b.legs.map(legRes);
+  if (rs.includes("perdu")) return "perdu";
+  if (rs.includes("attente")) return "attente";
+  return rs.every(r => r === "rembourse") ? "rembourse" : "gagne";
+}
+// Sélection remboursée (match annulé…) : le bookmaker la compte à la cote 1, la cote du ticket baisse d'autant
+const oddsEff = b => isCombo(b) ? b.odds / prodOf(b.legs.filter(l => legRes(l) === "rembourse").map(l => l.odds)) : b.odds;
+const profitOf = b => b.result === "gagne" ? b.stake * (oddsEff(b) - 1) : b.result === "perdu" ? -b.stake : 0;
 
 /* Regrouper des paris notés en un combiné */
 let picked = new Set();
@@ -975,6 +990,23 @@ function renderGroup() {
       prob: probs.every(p => p) ? prodOf(probs) : null, result: "attente", src: legs.every(l => srcOf(l) === "outil") ? "outil" : "moi", legs });
     renderJournal(); toast("Combiné créé");
   };
+}
+
+/* Sélection par sélection : chaque pari simple et chaque sélection de combiné, comme s'ils avaient été joués seuls à mise égale */
+function renderPicks(sorted) {
+  const all = sorted.flatMap(b => isCombo(b) ? b.legs.map(l => ({ ...l, src: l.src || b.src, result: legRes(l), inCombo: true })) : [{ ...b, inCombo: false }]);
+  const rows = [["outil", "Conseillées par l'outil"], ["moi", "Mes idées"]].map(([s, lab]) => {
+    const g = all.filter(x => srcOf(x) === s && (x.result === "gagne" || x.result === "perdu"));
+    const win = g.filter(x => x.result === "gagne");
+    const units = win.reduce((a, x) => a + x.odds - 1, 0) - (g.length - win.length);
+    const att = g.length ? g.reduce((a, x) => a + 1 / x.odds, 0) / g.length : null;
+    const fromC = g.filter(x => x.inCombo);
+    return { lab, n: g.length, win: win.length, att, units, cw: fromC.filter(x => x.result === "gagne").length, cn: fromC.length };
+  }).filter(r => r.n);
+  $("#jPicksWrap").hidden = !rows.length || !all.some(x => x.inCombo);
+  $("#jPicks").innerHTML = `<thead><tr><th>Sélections</th><th class="n">Réglées</th><th class="n">Réussite</th><th class="n" title="Chances moyennes annoncées par les cotes">Attendue</th><th class="n" title="Gain si chaque sélection avait été jouée seule, 1 unité chacune">Gain si jouées seules</th><th class="n">Dont dans un combiné</th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td>${r.lab}</td><td class="n">${r.n}</td><td class="n">${pct(r.win / r.n, 0)}</td><td class="n">${r.att != null ? pct(r.att, 0) : "–"}</td>
+      <td class="n" style="color:var(--${r.units > 0 ? "good" : r.units < 0 ? "bad" : "muted"})">${(r.units >= 0 ? "+" : "") + dec(r.units, 1)} u</td><td class="n">${r.cn ? `${r.cw} gagnées sur ${r.cn}` : "–"}</td></tr>`).join("") + "</tbody>";
 }
 
 /* Tableau « L'outil ou vos idées » */
@@ -1003,7 +1035,7 @@ function renderJournal() {
     tile("Profit attendu", exp ? (exp >= 0 ? "+" : "") + fcfa(exp) : "–", "selon vos probas : l'écart avec le réel, c'est la chance") +
     (() => { const cl = sorted.map(clvOf).filter(v => v != null); const m = cl.length ? cl.reduce((a, b) => a + b, 0) / cl.length : null;
       return tile("CLV moyenne", m == null ? "–" : (m >= 0 ? "+" : "") + pct(m), cl.length ? `sur ${cl.length} paris · positive = vous battez la cote de clôture` : "se calcule après les matchs, à la relance suivante", m == null ? null : m >= 0 ? "good" : "bad"); })();
-  renderOrigins(sorted);
+  renderOrigins(sorted); renderPicks(sorted);
   for (const id of [...picked]) { const b = bets.find(x => String(x.id) === id); if (!b || isCombo(b) || b.result !== "attente") picked.delete(id); }
   if (!sorted.length) {
     $("#jTable").innerHTML = `<tbody><tr><td class="empty" colspan="11"><h3>Journal vide</h3>Ajoutez un pari ci-dessus, ou cliquez sur « Noter » à côté d'un pari conseillé.</td></tr></tbody>`;
@@ -1013,20 +1045,25 @@ function renderJournal() {
         return `<tr><td>${can ? `<input type="checkbox" data-pick="${b.id}" ${picked.has(String(b.id)) ? "checked" : ""} aria-label="Cocher pour un combiné">` : ""}</td>
         <td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td>
         <td><select class="sel" data-src="${b.id}" aria-label="Origine">${[["outil", "Outil"], ["moi", "Mon idée"]].map(([v, l]) => `<option value="${v}" ${srcOf(b) === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
-        <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections` : esc(b.match)}</td>
-        <td>${c ? `<ul class="legs">${b.legs.map(l => `<li>${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}`}</td>
+        <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections${(n => n ? `<div class="muted" style="font-size:12px">${b.legs.filter(l => legRes(l) === "gagne").length} sur ${n} gagnées</div>` : "")(b.legs.filter(l => ["gagne", "perdu"].includes(legRes(l))).length)}` : esc(b.match)}</td>
+        <td>${c ? `<ul class="legs">${b.legs.map((l, i) => `<li class="leg-${legRes(l)}">${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span>
+          <select class="sel xs" data-leg="${b.id}|${i}" aria-label="Résultat de cette sélection">${RES.map(([v, t]) => `<option value="${v}" ${legRes(l) === v ? "selected" : ""}>${t}</option>`).join("")}</select></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}`}</td>
         <td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
         <td><select class="sel" data-r="${b.id}" aria-label="Résultat">${[["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]].map(([v, l]) => `<option value="${v}" ${b.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
         <td class="n" style="color:var(--${profitOf(b) > 0 ? "good" : profitOf(b) < 0 ? "bad" : "muted"})">${b.result === "attente" ? "–" : (profitOf(b) >= 0 ? "+" : "") + fcfa(profitOf(b))}</td>
         <td class="n">${(v => v == null ? '<span class="muted">–</span>' : `<span style="color:var(--${v >= 0 ? "good" : "bad"})">${v >= 0 ? "+" : ""}${pct(v)}</span>`)(clvOf(b))}</td>
         <td>${c ? `<button class="btn ghost sm" data-split="${b.id}" type="button">Séparer</button> ` : ""}<button class="btn ghost sm" data-del="${b.id}" aria-label="Supprimer">Supprimer</button></td></tr>`; }).join("") + "</tbody>";
-    $$("#jTable [data-r]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.r).result = s.value; saveBets(); renderJournal(); });
+    $$("#jTable [data-r]").forEach(s => s.onchange = () => { const b = bets.find(x => String(x.id) === s.dataset.r); b.result = s.value;
+      if (isCombo(b) && s.value === "gagne") b.legs.forEach(l => { if (legRes(l) === "attente") l.result = "gagne"; });   // ticket gagné = toutes les sélections gagnées
+      saveBets(); renderJournal(); });
+    $$("#jTable [data-leg]").forEach(s => s.onchange = () => { const [id, i] = s.dataset.leg.split("|"); const b = bets.find(x => String(x.id) === id);
+      b.legs[+i].result = s.value; b.result = comboResult(b); saveBets(); renderJournal(); });
     $$("#jTable [data-src]").forEach(s => s.onchange = () => { bets.find(b => String(b.id) === s.dataset.src).src = s.value; saveBets(); renderJournal(); });
     $$("#jTable [data-pick]").forEach(cb => cb.onchange = () => { cb.checked ? picked.add(cb.dataset.pick) : picked.delete(cb.dataset.pick); renderGroup(); });
     $$("#jTable [data-split]").forEach(btn => btn.onclick = () => {   // défait un combiné : chaque sélection redevient un pari simple en attente
       const b = bets.find(x => String(x.id) === btn.dataset.split); if (!b) return;
       bets = bets.filter(x => x !== b);
-      b.legs.forEach((l, i) => bets.push({ id: Date.now() + i + Math.random(), ...l, date: l.date || b.date, stake: l.stake || b.stake, result: "attente", src: l.src || b.src }));
+      b.legs.forEach((l, i) => bets.push({ id: Date.now() + i + Math.random(), ...l, date: l.date || b.date, stake: l.stake || b.stake, result: legRes(l), src: l.src || b.src }));
       saveBets(); renderJournal(); toast("Combiné séparé");
     });
     $$("#jTable [data-del]").forEach(btn => btn.onclick = () => {
