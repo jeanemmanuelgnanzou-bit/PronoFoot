@@ -168,6 +168,9 @@ details.panel summary::marker { color: var(--accent); }
 .xfer textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: 12px ui-monospace, monospace; resize: vertical; }
 #jTable td.n { white-space: nowrap; }
 .jlegs { display: grid; gap: 8px; }
+.cform { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.cform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.cform select, .cform input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); min-width: 0; }
 .fort { border-top: 1px solid var(--line); padding: 12px 0 4px; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 2px; }
 .mini.hist { font-size: 12px; color: var(--fg-2); }
@@ -183,6 +186,7 @@ table.cross tr.tot td { border-top: 2px solid var(--line); }
 .jgroup input { width: 110px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .legs { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--fg-2); }
 .legs li { margin-bottom: 4px; }
+.parts { display: flex; flex-wrap: wrap; gap: 4px; margin: 3px 0; } .parts .tag { background: var(--good-soft); color: var(--fg); }
 .legs .leg-gagne { color: var(--good); } .legs .leg-perdu { color: var(--bad); } .legs .leg-perdu .lt { text-decoration: line-through; }
 .sel.tsel { background: var(--line); border-color: transparent; }
 .sel.xs { font-size: 11px; padding: 1px 4px; margin-left: 4px; color: var(--fg); text-decoration: none; }
@@ -268,6 +272,17 @@ table.cross tr.tot td { border-top: 2px solid var(--line); }
           <h3 style="margin-bottom:10px">Scores exacts</h3>
           <div class="heat" id="heat" aria-label="Probabilité de chaque score"></div>
           <p class="muted" style="font-size:12px; margin:8px 0 0">Lignes : buts domicile · colonnes : buts extérieur</p>
+        </div>
+        <div class="panel" id="comboBox">
+          <h3 style="margin-bottom:4px">Pari combiné sur ce match</h3>
+          <p class="muted" style="font-size:12px;margin:0 0 10px">Ex. « 2, +1,5 » : victoire extérieur et plus de 1,5 buts. Les chances ensemble se lisent sur la grille des scores exacts.</p>
+          <div class="cform">
+            <label>Résultat<select id="cRes"></select></label>
+            <label>Buts<select id="cGoals"></select></label>
+            <label>Les deux marquent<select id="cBtts"><option value="">—</option><option value="oui">Oui</option><option value="non">Non</option></select></label>
+            <label>Votre cote<input id="cOdds" inputmode="decimal" placeholder="optionnel"></label>
+          </div>
+          <div id="cOut" style="margin-top:12px"></div>
         </div>
         <div class="panel rules">
           <h3 style="margin-bottom:10px">Règles de la stratégie</h3>
@@ -414,6 +429,43 @@ function predict(code, home, away) {
   }
   return out;
 }
+
+/* ---------- Pari combiné sur un même match : chances ensemble, lues sur la grille des scores ---------- */
+const RES_OK = { "1": (i, j) => i > j, "N": (i, j) => i === j, "2": (i, j) => i < j, "1N": (i, j) => i >= j, "N2": (i, j) => i <= j, "12": (i, j) => i !== j };
+function jointProb(M, r, dir, line, bt) {
+  let p = 0;
+  for (let i = 0; i < M.length; i++) for (let j = 0; j < M.length; j++) {
+    if (r && !RES_OK[r](i, j)) continue;
+    if (dir && !(dir === "plus" ? i + j > line : i + j < line)) continue;
+    if (bt && (bt === "oui") !== (i > 0 && j > 0)) continue;
+    p += M[i][j];
+  }
+  return p;
+}
+const resLabel = (r, h, a) => ({ "1": `Victoire ${h}`, "N": "Match nul", "2": `Victoire ${a}`, "1N": `${h} ou nul`, "N2": `Nul ou ${a}`, "12": "Pas de match nul" })[r];
+let combo = store.get("combo", { r: "2", g: "plus|1.5", b: "" });
+function renderCombo() {
+  if (!P || !$("#cRes")) return;
+  $("#cRes").innerHTML = `<option value="">—</option>` + ["1", "N", "2", "1N", "N2", "12"].map(r => `<option value="${r}" ${combo.r === r ? "selected" : ""}>${r} · ${esc(resLabel(r, cur.h, cur.a))}</option>`).join("");
+  $("#cGoals").innerHTML = `<option value="">—</option>` + ["plus", "moins"].flatMap(d => [0.5, 1.5, 2.5, 3.5, 4.5].map(l => `<option value="${d}|${l}" ${combo.g === `${d}|${l}` ? "selected" : ""}>${d === "plus" ? "Plus" : "Moins"} de ${dec(l, 1)}</option>`)).join("");
+  $("#cBtts").value = combo.b || "";
+  const [gd, gl] = (combo.g || "").split("|");
+  const parts = [combo.r && jointProb(P.M, combo.r, "", 0, ""), gd && jointProb(P.M, "", gd, +gl, ""), combo.b && jointProb(P.M, "", "", 0, combo.b)].filter(v => v !== "" && v != null && v !== false);
+  const pj = jointProb(P.M, combo.r, gd, +gl, combo.b);
+  const o = parseNum($("#cOdds").value);
+  if (parts.length < 2) { $("#cOut").innerHTML = `<p class="muted" style="font-size:13px;margin:0">Choisissez au moins deux éléments pour voir la chance qu'ils passent ensemble.</p>`; return; }
+  const prod = parts.reduce((a, v) => a * v, 1);
+  const lab = [combo.r && resLabel(combo.r, cur.h, cur.a), gd && `${gd === "plus" ? "plus" : "moins"} de ${dec(+gl, 1)} buts`, combo.b && (combo.b === "oui" ? "les deux équipes marquent" : "au moins une équipe ne marque pas")].filter(Boolean).join(" + ");
+  let verdict = "";
+  if (o && o > 1) { const v = o * pj - 1;
+    verdict = v > 0 ? `<div class="pill neutral" style="margin-top:8px;white-space:normal;display:block">Votre cote ${dec(o)} est au-dessus de la cote juste (${v >= 0 ? "+" : ""}${pct(v, 0)}) · avis du modèle seul, non validé</div>`
+      : `<div class="pill bad" style="margin-top:8px;white-space:normal;display:block">Votre cote ${dec(o)} est sous la cote juste (${pct(v, 0)}) : pas intéressant</div>`; }
+  $("#cOut").innerHTML = `<div class="fg2" style="font-size:13px">${esc(lab)}</div>
+    <div class="row" style="gap:18px;align-items:baseline;margin-top:4px"><span style="font-size:26px;font-weight:700">${pct(pj, 0)}</span><span>cote juste <b>${dec(1 / pj)}</b></span></div>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">Séparément : ${parts.map(v => pct(v, 0)).join(" et ")}. Les multiplier donnerait ${pct(prod, 0)} (cote ${dec(1 / prod)}), ${Math.abs(pj - prod) < 0.01 ? "presque pareil ici." : pj > prod ? "trop bas : ces événements vont souvent ensemble." : "trop haut : ces événements s'opposent un peu."}</p>${verdict}`;
+}
+["#cRes", "#cGoals", "#cBtts"].forEach(id => $(id).addEventListener("change", () => { combo = { r: $("#cRes").value, g: $("#cGoals").value, b: $("#cBtts").value }; store.set("combo", combo); renderCombo(); }));
+$("#cOdds").addEventListener("input", renderCombo);
 
 /* ---------- Value et mise ---------- */
 function stakeFor(p, odds, threshold) {
@@ -669,7 +721,7 @@ function renderAnalyse() {
   const mx = Math.max(...P.M.slice(0, 6).flatMap(r => r.slice(0, 6)));
   for (let i = 0; i < 6; i++) { h += `<div class="hd">${i}</div>`; for (let j = 0; j < 6; j++) { const p = P.M[i][j]; h += `<div title="${i}-${j} : ${pct(p)}" style="background:rgba(${css("--heat")},${(0.06 + 0.5 * p / mx).toFixed(3)})">${p >= 0.005 ? (p * 100).toFixed(1).replace(".", ",") : "·"}</div>`; } }
   $("#heat").innerHTML = h;
-  renderMarkets();
+  renderMarkets(); renderCombo();
 }
 
 function reliability(code, group) {
@@ -996,8 +1048,30 @@ function marketInfo(text, home, away) {   // « 1 », « +2.5 », « Corners +9.
   if (n) { const c = teamCands(text)[0]; if (c && c.s >= 0.75) return { type: "1N2", mid: home && c.t === home ? "1" : away && c.t === away ? "2" : null }; }
   return { type: "Autre", mid: null };
 }
-const typeOf = b => b.type || typeFromMid(b.mid) || marketInfo(b.market, b.home, b.away).type;
-const typeOpts = (sel, attr) => `<select class="sel xs tsel" ${attr} aria-label="Type de pari">${TYPES.map(t => `<option ${t === sel ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+/* Marchés à plusieurs parties sur un même match (« 2, +1,5 » = victoire extérieur ET plus de 1,5 buts) */
+const splitMarket = t => String(t || "").split(/,(?!\d)|;|&|\s+et\s+|\s+\+\s+/i).map(x => x.trim()).filter(Boolean);
+function describePart(mi, txt, b) {
+  const [h, a] = String(b.match || "").split(/\s+[-–—]\s+|\s+vs\.?\s+/i);
+  const ln = lineOf({ mid: mi.mid, market: txt });
+  if (mi.type === "1N2") return mi.mid === "1" ? `Victoire ${h || "domicile"} (1)` : mi.mid === "N" ? "Match nul (N)" : mi.mid === "2" ? `Victoire ${a || "extérieur"} (2)` : `Résultat : ${txt}`;
+  if (mi.type === "Double chance") return `Double chance ${mi.mid || txt}`;
+  if (mi.type === "BTTS") return mi.mid === "nbtts" ? "Au moins une équipe ne marque pas" : "Les deux équipes marquent";
+  if (mi.type === "Autre") return txt;
+  return ln.dir && ln.line != null ? `${ln.dir === "plus" ? "Plus" : "Moins"} de ${dec(ln.line, 1)} ${UNIT[mi.type]}` : `${mi.type} ${txt}`;
+}
+function partsOf(b) {
+  const ps = splitMarket(b.market);
+  if (ps.length < 2) return null;
+  return ps.map(p => { const mi = marketInfo(p, b.home, b.away); return { ...mi, txt: p, desc: describePart(mi, p, b) }; });
+}
+function typeOf(b) {
+  if (b.type) return b.type;
+  const ps = partsOf(b);
+  if (ps) return TYPES.filter(t => ps.some(p => p.type === t)).join(" + ");
+  return typeFromMid(b.mid) || marketInfo(b.market, b.home, b.away).type;
+}
+const partTags = b => { const ps = partsOf(b); return ps ? `<div class="parts">${ps.map(p => `<span class="tag">${esc(p.desc)}</span>`).join("")}</div>` : ""; };
+const typeOpts = (sel, attr) => `<select class="sel xs tsel" ${attr} aria-label="Type de pari">${(TYPES.includes(sel) ? TYPES : [sel, ...TYPES]).map(t => `<option ${t === sel ? "selected" : ""}>${t}</option>`).join("")}</select>`;
 const leagueOf = b => b.league || (detectMatch(b.match) || {}).league || "";
 const leagueName = c => c && L[c] ? L[c].nom : "Championnat ?";
 const leagueOpts = sel => `<option value="">Championnat ?</option>` + Object.entries(L).map(([c, l]) => `<option value="${c}" ${sel === c ? "selected" : ""}>${esc(l.nom)} · ${esc(l.pays)}</option>`).join("");
@@ -1047,7 +1121,7 @@ function legsData() { return $$("#jLegs .jleg").map(r => {
   const same = m.league === league, home = same ? m.home : undefined, away = same ? m.away : undefined;
   const mi = marketInfo(market, home, away);
   const o = { match, market, odds: parseNum(r.querySelector('[data-f="odds"]').value), league: league || undefined };
-  if (home && away) Object.assign(o, { home, away, mid: mi.mid || undefined });   // permet aussi la CLV des paris saisis à la main
+  if (home && away) Object.assign(o, { home, away, mid: splitMarket(market).length > 1 ? undefined : mi.mid || undefined });   // permet aussi la CLV des paris saisis à la main
   return o;
 }); }
 function syncLegs() {
@@ -1150,7 +1224,7 @@ function renderCross(sorted) {
   const cell = g => { const w = g.filter(x => x.result === "gagne"); const u = w.reduce((a, x) => a + x.odds - 1, 0) - (g.length - w.length);
     const att = g.reduce((a, x) => a + 1 / x.odds, 0) / (g.length || 1); return { n: g.length, w: w.length, u, att }; };
   const lgs = [...new Set(all.map(leagueOf))].sort((a, b) => (L[a] ? Object.keys(L).indexOf(a) : 99) - (L[b] ? Object.keys(L).indexOf(b) : 99));
-  const tps = TYPES.filter(t => all.some(x => typeOf(x) === t));
+  const tps = [...TYPES.filter(t => t !== "Autre"), ...[...new Set(all.map(typeOf))].filter(t => !TYPES.includes(t)), "Autre"].filter(t => all.some(x => typeOf(x) === t));
   const show = (c, strong) => { if (!c.n) return `<td class="n muted">–</td>`;
     const k = Math.max(-1, Math.min(1, c.u / Math.max(3, c.n * 0.6)));   // intensité de la couleur selon le gain
     const bg = c.u === 0 ? "" : `background:color-mix(in srgb, var(--${c.u > 0 ? "good" : "bad"}) ${Math.round(8 + Math.abs(k) * 32)}%, transparent);`;
@@ -1207,9 +1281,9 @@ function renderJournal() {
         <td class="mono">${new Date(b.date).toLocaleDateString("fr-FR")}</td>
         <td><select class="sel" data-src="${b.id}" aria-label="Origine">${[["outil", "Outil"], ["moi", "Mon idée"]].map(([v, l]) => `<option value="${v}" ${srcOf(b) === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
         <td>${c ? `<span class="tag o">Combiné</span> ${b.legs.length} sélections${(n => n ? `<div class="muted" style="font-size:12px">${b.legs.filter(l => legRes(l) === "gagne").length} sur ${n} gagnées</div>` : "")(b.legs.filter(l => ["gagne", "perdu"].includes(legRes(l))).length)}` : `${esc(b.match)}<div><select class="sel xs" data-lg="${b.id}" aria-label="Championnat">${leagueOpts(leagueOf(b))}</select> ${typeOpts(typeOf(b), `data-ty="${b.id}"`)}</div>`}</td>
-        <td>${c ? `<ul class="legs">${b.legs.map((l, i) => `<li class="leg-${legRes(l)}"><span class="lt">${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span></span> ${typeOpts(typeOf(l), `data-tyl="${b.id}|${i}"`)}
+        <td>${c ? `<ul class="legs">${b.legs.map((l, i) => `<li class="leg-${legRes(l)}"><span class="lt">${esc(l.match)} : ${esc(l.market)} <span class="muted">@ ${dec(l.odds)}</span></span>${partTags(l)} ${typeOpts(typeOf(l), `data-tyl="${b.id}|${i}"`)}
           <select class="sel xs" data-lgl="${b.id}|${i}" aria-label="Championnat">${leagueOpts(leagueOf(l))}</select>
-          <select class="sel xs" data-leg="${b.id}|${i}" aria-label="Résultat de cette sélection">${RES.map(([v, t]) => `<option value="${v}" ${legRes(l) === v ? "selected" : ""}>${t}</option>`).join("")}</select></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}`}</td>
+          <select class="sel xs" data-leg="${b.id}|${i}" aria-label="Résultat de cette sélection">${RES.map(([v, t]) => `<option value="${v}" ${legRes(l) === v ? "selected" : ""}>${t}</option>`).join("")}</select></li>`).join("")}</ul>` : `${esc(b.market)}${b.book ? ` <span class="muted">· ${esc(b.book)}</span>` : ""}${partTags(b)}`}</td>
         <td class="n">${dec(b.odds)}</td><td class="n">${fcfa(b.stake)}</td>
         <td><select class="sel" data-r="${b.id}" aria-label="Résultat">${[["attente", "En attente"], ["gagne", "Gagné"], ["perdu", "Perdu"], ["rembourse", "Remboursé"]].map(([v, l]) => `<option value="${v}" ${b.result === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
         <td class="n" style="color:var(--${profitOf(b) > 0 ? "good" : profitOf(b) < 0 ? "bad" : "muted"})">${b.result === "attente" ? "–" : (profitOf(b) >= 0 ? "+" : "") + fcfa(profitOf(b))}</td>
@@ -1331,7 +1405,12 @@ function lineOf(x) {   // sens (plus / moins, oui / non) et ligne d'une sélecti
   const dir = /(^|\s)\+|plus|over|^o\s?\d|>/.test(t) ? "plus" : /(^|\s)-\s?\d|moins|under|^u\s?\d|</.test(t) ? "moins" : null;
   return { dir, line: num ? +num : null };
 }
-function cellKey(x) { const t = typeOf(x); const d = ["Buts", "BTTS", ...Object.keys(STAT_KEY)].includes(t) ? lineOf(x).dir : null; return `${leagueOf(x)}|${t}|${d || ""}`; }
+function cellKey(x) {
+  const t = typeOf(x), ps = partsOf(x);
+  const d = ps ? ps.map(p => ["Buts", "BTTS", ...Object.keys(STAT_KEY)].includes(p.type) ? lineOf({ mid: p.mid, market: p.txt }).dir : null).filter(Boolean).join(" / ")
+    : ["Buts", "BTTS", ...Object.keys(STAT_KEY)].includes(t) ? lineOf(x).dir : null;
+  return `${leagueOf(x)}|${t}|${d || ""}`;
+}
 function cellLabel(k) { const [c, t, d] = k.split("|"); return `${leagueName(c)} · ${t === "BTTS" ? `Les deux équipes marquent : ${d || "?"}` : t}${d && t !== "BTTS" ? ` ${d}` : ""}`; }
 function strengths() {
   const sel = selections(bets)
@@ -1345,7 +1424,7 @@ function strengths() {
     const st = a => { const w = a.filter(x => x.result === "gagne").length; return { n: a.length, w, r: w / a.length, att: a.reduce((s, x) => s + 1 / x.odds, 0) / a.length,
       u: a.reduce((s, x) => s + (x.result === "gagne" ? x.odds - 1 : -1), 0) }; };
     const all = st(xs), last = st(xs.slice(-10));
-    const lines = xs.map(x => lineOf(x).line).filter(v => v != null);
+    const lines = xs.map(x => { const ps = partsOf(x); if (!ps) return lineOf(x).line; const b = ps.find(p => p.type === "Buts"); return b ? lineOf({ mid: b.mid, market: b.txt }).line : null; }).filter(v => v != null);
     const line = lines.length ? +Object.entries(lines.reduce((m, v) => (m[v] = (m[v] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1])[0][0] : null;
     const [c, t, d] = k.split("|");
     return { k, c, t, d, line, ...all, last, fort: all.n >= FORT_MIN && all.u > 0 && all.r > all.att, baisse: all.n >= FORT_MIN && last.r < last.att };
@@ -1354,6 +1433,16 @@ function strengths() {
 function overCount(code, key, m, line) { const par = (L[code].counts || {})[key]; let cdf = 0; for (let k = 0; k <= Math.floor(line); k++) cdf += countPmf(k, m, par.disp); return 1 - cdf; }
 function modelPick(f, s) {   // probabilité du modèle pour le pari « type de la case » sur ce match
   const p = predict(f.league, f.home, f.away);
+  if (s.t.includes(" + ")) {   // pari combiné sur le même match : on prend le résultat le plus probable avec les autres conditions
+    const ts = s.t.split(" + "), toks = (s.d || "").split(" / ");
+    if (ts.some(t => !["1N2", "Double chance", "Buts", "BTTS"].includes(t))) return null;
+    const gd = ts.includes("Buts") ? toks.find(t => t === "plus" || t === "moins") : "", gl = s.line ?? 2.5;
+    const bt = ts.includes("BTTS") ? toks.find(t => t === "oui" || t === "non") || "oui" : "";
+    if (ts.includes("Buts") && !gd) return null;
+    const rs = ts.includes("1N2") ? ["1", "N", "2"] : ts.includes("Double chance") ? ["1N", "N2", "12"] : [""];
+    const [r, pr] = rs.map(r => [r, jointProb(p.M, r, gd, gl, bt)]).sort((a, b) => b[1] - a[1])[0];
+    return { lab: [r && resLabel(r, f.home, f.away), gd && `${gd === "plus" ? "plus" : "moins"} de ${dec(gl, 1)} buts`, bt && (bt === "oui" ? "les deux marquent" : "une équipe ne marque pas")].filter(Boolean).join(" + "), p: pr, combo: { r, g: gd ? `${gd}|${gl}` : "", b: bt } };
+  }
   if (s.t === "BTTS") return { lab: s.d === "non" ? "Au moins une équipe ne marque pas" : "Les deux équipes marquent", p: s.d === "non" ? 1 - p.btts : p.btts };
   if (s.t === "1N2" || s.t === "Double chance") {
     const opts = s.t === "1N2" ? [["1 · " + f.home, p.ph], ["N · nul", p.pd], ["2 · " + f.away, p.pa]] : [["1N", p.ph + p.pd], ["N2", p.pd + p.pa], ["12", p.ph + p.pa]];
@@ -1387,19 +1476,19 @@ function renderForts() {
       <span class="muted" style="font-size:12px">vos ${s.n} paris : ${s.w} gagnés (${pct(s.r, 0)}, attendu ${pct(s.att, 0)}) · <span style="color:var(--good)">+${dec(s.u, 1)} u</span></span></div>
       ${s.baisse ? `<div class="pill warn" style="margin:6px 0">⚠ En baisse : ${s.last.w} gagnés sur vos ${s.last.n} derniers, sous ce qu'annonçaient les cotes. Prudence.</div>` : ""}
       ${ms.length ? `<div class="scroll-x"><table><tbody>${ms.map(({ f, m }) => `<tr><td class="mono" style="white-space:nowrap">${new Date(f.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })} ${esc(f.heure || "")}</td>
-        <td><button class="linkbtn" data-open="${f.league}|${esc(f.home)}|${esc(f.away)}">${esc(f.home)} – ${esc(f.away)}</button></td><td>${esc(m.lab)}</td>
+        <td><button class="linkbtn" data-open="${f.league}|${esc(f.home)}|${esc(f.away)}" ${m.combo ? `data-combo='${JSON.stringify(m.combo)}'` : ""}>${esc(f.home)} – ${esc(f.away)}</button></td><td>${esc(m.lab)}</td>
         <td class="n"><b>${pct(m.p, 0)}</b><div class="muted" style="font-size:11px">cote juste ${dec(1 / m.p)}</div></td></tr>`).join("")}</tbody></table></div>`
         : `<p class="muted" style="font-size:12px;margin:6px 0 0">${fx.some(f => f.league === s.c) ? "Pas de modèle pour ce type de pari dans ce championnat." : "Aucun match à venir dans ce championnat pour l'instant."}</p>`}</div>`;
   }
   box.innerHTML = h + ignoredNote() + `<p class="muted" style="font-size:12px;margin:10px 0 0">Ne pariez que si la cote proposée par votre bookmaker est au-dessus de la cote juste. Les chances viennent du modèle, moins précis que les cotes Pinnacle.</p></div>`;
-  $$("#forts [data-open]").forEach(b => b.onclick = () => { const [l, hh, a] = b.dataset.open.split("|"); openMatch(l, hh, a); });
+  $$("#forts [data-open]").forEach(b => b.onclick = () => { const [l, hh, a] = b.dataset.open.split("|"); if (b.dataset.combo) { combo = JSON.parse(b.dataset.combo); store.set("combo", combo); } openMatch(l, hh, a); });
 }
 function ignoredNote() {
   const ig = strengths.ignored || [];
   const n = S_total();
   const d = selections(bets).filter(x => srcOf(x) === "moi" && x.copies > 1 && (x.result === "gagne" || x.result === "perdu"));
   return `<p class="muted" style="font-size:12px;margin:10px 0 0">${n} sélection${n > 1 ? "s" : ""} « Mon idée » réglée${n > 1 ? "s" : ""} au total, combinés compris.` +
-    (d.length ? ` Un même pari joué dans plusieurs tickets ne compte qu'une fois (${d.map(x => `${esc(x.match)} : ${esc(x.market)} ×${x.copies}`).join(", ")}).` : "") +
+    (d.length ? ` Un même pari joué dans plusieurs tickets ne compte qu'une fois (${d.length} cas : ${[...new Set(d.map(x => `${esc(x.match)} : ${esc(x.market)}`))].slice(0, 4).join(", ")}${d.length > 4 ? "…" : ""}).` : "") +
     (ig.length ? ` ${ig.length} non classée${ig.length > 1 ? "s" : ""}, faute de championnat ou de type reconnu : ${ig.map(x => `« ${esc(x.match)} : ${esc(x.market)} »`).join(", ")}. Corrigez le championnat ou le type dans Mon journal.` : "") + `</p>`;
 }
 function S_total() { return strengths().reduce((a, s) => a + s.n, 0) + (strengths.ignored || []).length; }
